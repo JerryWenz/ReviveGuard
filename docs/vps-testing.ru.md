@@ -19,12 +19,11 @@ sudo usermod -aG sudo rgtest
 
 ## 1. Установка (одной командой)
 
-Скрипт сам предупредит, что установит, и спросит подтверждение. Сначала прочитайте его:
+Скрипт сам предупредит, что установит, и спросит подтверждение.
 
 ```bash
 apt-get update && apt-get install -y curl      # только если curl нет
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/main/install.sh
-less install.sh      # листайте пробелом, выход — клавиша q
 bash install.sh
 ```
 

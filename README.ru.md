@@ -65,11 +65,9 @@ CRITICAL/HIGH, пока политика в конфиге (`allow_critical`, `a
 Одной командой на сервере Debian/Ubuntu (от root). Скрипт перечисляет, что сделает, спрашивает
 подтверждение, ставит в систему только недостающее (`python3`, `python3-venv`, `ca-certificates`),
 а ReviveGuard — в собственное виртуальное окружение, затем запускает аудит только на чтение.
-Сначала прочитайте скрипт:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/main/install.sh
-less install.sh      # листайте пробелом, выход — клавиша q
 sudo bash install.sh
 ```
 

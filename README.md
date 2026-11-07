@@ -62,11 +62,10 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 
 One command on a Debian/Ubuntu server (as root). The script lists what it will do, asks for
 confirmation, installs only missing prerequisites (`python3`, `python3-venv`, `ca-certificates`)
-into the system and ReviveGuard into its own virtualenv, then runs a read-only audit. Read it first:
+into the system and ReviveGuard into its own virtualenv, then runs a read-only audit:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/main/install.sh
-less install.sh      # scroll with space, press q to quit
 sudo bash install.sh
 ```
 
