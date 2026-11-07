@@ -317,7 +317,7 @@
   "admin.intro": "I will create a separate administrator with sudo and key-only login, so root login and passwords can be switched off safely afterwards.",
   "admin.ask_name": "Account name [admin]: ",
   "admin.key_help": "Paste your PUBLIC key: one line starting with ssh-ed25519 or ssh-rsa (on your computer: 'cat ~/.ssh/id_ed25519.pub'; no key yet? run 'ssh-keygen -t ed25519' there first).",
-  "admin.ask_key": "Public key: ",
+  "admin.ask_key": "Public key (press Enter to skip and add it later): ",
   "admin.err.bad_name": "Invalid name: use lowercase letters, digits, '_' or '-' (2-31 characters, starting with a letter).",
   "admin.err.reserved": "This name is reserved by the system; choose another one.",
   "admin.err.bad_key": "This is not a valid public key line (it must be a single 'ssh-ed25519 AAAA...' style line; options such as command= are not accepted, and never paste a private key).",
@@ -371,5 +371,16 @@
   "docker.not_installed": "Docker is not installed; Docker checks are skipped.",
   "docker.needs_root": "Containers can only be inspected as root.",
   "docker.unreadable": "The container list could not be read (is the Docker daemon running?).",
-  "fix.reason.docker_manual": "ReviveGuard never modifies containers or restarts Docker; follow the recommendation."
+  "fix.reason.docker_manual": "ReviveGuard never modifies containers or restarts Docker; follow the recommendation.",
+  "fix.reason.auth_unknown": "I cannot tell how this SSH session logged in (no matching entry in the SSH log). Without proof that your key works, narrowing access could lock you out; log in with your public key in a NEW terminal and run this from that session.",
+  "fix.reason.logged_in_with_password": "this session logged in with '{method}', not a public key. A key in authorized_keys may not be yours, so disabling passwords or root could lock you out. Log in with your public key in a NEW terminal and run this from that session.",
+  "rollback.reloaded": "The {service} service was reloaded with the restored files.",
+  "rollback.reload_failed": "The files were restored but {service} could not be reloaded: do it yourself ('systemctl reload {service}').",
+  "rollback.reload_skipped": "The files were restored, but the {service} configuration does not validate, so it was not reloaded. Check it with 'sshd -t'.",
+  "admin.no_key_note": "No key now: the account '{name}' will be created WITHOUT a login key, so nobody can log in as '{name}' until you add one with 'reviveguard add-key --name {name}'. Root login and passwords will stay as they are.",
+  "admin.err.no_such_user": "There is no suitable account named '{name}' (root cannot be used here).",
+  "fix.access.add_key": "add the login key {fingerprint} to the account '{name}' (existing keys are kept)",
+  "fix.next.admin_user_nokey": "the account has no login key yet, so nobody can log in as {name}. On your computer run 'cat ~/.ssh/id_ed25519.pub', then here: 'reviveguard add-key --name {name}' and paste the line. Then test 'ssh {name}@<server>' in a NEW terminal.",
+  "fix.next.key_added": "open a NEW terminal and check that 'ssh {name}@<server>' works and 'sudo -v' succeeds. Then reconnect as {name} and run 'sudo reviveguard wizard' to switch off root login and passwords.",
+  "wizard.admin_failed_skip": "The administrator account was not created, so I skip the steps that narrow access (root login, passwords): they could lock you out. Run 'reviveguard admin-user' and then 'reviveguard wizard' again."
 }

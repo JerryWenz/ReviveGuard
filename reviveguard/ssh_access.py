@@ -9,6 +9,7 @@ satisfy ``StrictModes``. Key contents are never stored or reported.
 from __future__ import annotations
 
 import fnmatch
+import re
 import stat as stat_mod
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,23 +76,76 @@ def current_login_user(ctx: AuditContext, passwd: list[PasswdEntry]) -> str | No
     return "root" if ctx.running_as_root else ctx.env.get("USER")
 
 
-def is_remote_session(ctx: AuditContext) -> bool:
-    """True if this process runs under SSH (environment, or an ``sshd`` ancestor)."""
-    if any(ctx.env.get(k) for k in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY")):
-        return True
+def ancestor_sshd_pid(ctx: AuditContext) -> str | None:
+    """PID of the ``sshd`` process this process descends from (None if none)."""
     pid = "self"
     for _ in range(32):  # bounded walk up the process tree
         stat_line = ctx.read_text(f"/proc/{pid}/stat")
         if not stat_line or ")" not in stat_line:
-            return False
+            return None
         comm = stat_line[stat_line.find("(") + 1 : stat_line.rfind(")")]
         fields = stat_line[stat_line.rfind(")") + 2 :].split()
         if comm.startswith("sshd"):
-            return True
+            return stat_line.split()[0]
         if len(fields) < 2 or not fields[1].isdigit() or int(fields[1]) <= 1:
-            return False
+            return None
         pid = fields[1]
-    return False
+    return None
+
+
+def is_remote_session(ctx: AuditContext) -> bool:
+    """True if this process runs under SSH (environment, or an ``sshd`` ancestor)."""
+    if any(ctx.env.get(k) for k in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY")):
+        return True
+    return ancestor_sshd_pid(ctx) is not None
+
+
+ACCEPTED = re.compile(
+    r"Accepted (?P<method>[\w-]+) for (?P<user>\S+) from (?P<ip>\S+) port (?P<port>\d+)"
+)
+LOG_LINES = 3000
+
+
+def current_connection(ctx: AuditContext) -> tuple[str, str] | None:
+    """(client ip, client port) of the SSH connection this process runs in."""
+    parts = (ctx.env.get("SSH_CONNECTION") or ctx.env.get("SSH_CLIENT") or "").split()
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+    pid = ancestor_sshd_pid(ctx)  # sudo drops SSH_* variables; find the peer through sshd
+    if pid is None:
+        return None
+    proc = ctx.runner(["ss", "-H", "-tnp"])
+    for line in proc.stdout.splitlines() if proc.ok else []:
+        cols = line.split()
+        if f"pid={pid}," in line and len(cols) >= 5:
+            ip, _, port = cols[4].rpartition(":")
+            return ip.strip("[]"), port
+    return None
+
+
+def auth_log(ctx: AuditContext) -> str:
+    proc = ctx.runner(
+        ["journalctl", "-u", "ssh", "-u", "sshd", "--no-pager", "-o", "cat", "-n", str(LOG_LINES)]
+    )
+    if proc.ok and proc.stdout.strip():
+        return proc.stdout
+    return "\n".join((ctx.read_text("/var/log/auth.log") or "").splitlines()[-LOG_LINES:])
+
+
+def session_auth_method(ctx: AuditContext) -> str | None:
+    """How THIS ssh session authenticated (``publickey``, ``password``, ...), from the SSH log.
+
+    A ``publickey`` login proves that the administrator really holds a working key, which no
+    amount of inspecting ``authorized_keys`` can. None means it could not be determined.
+    """
+    conn = current_connection(ctx)
+    if conn is None:
+        return None
+    method = None
+    for m in ACCEPTED.finditer(auth_log(ctx)):
+        if (m["ip"], m["port"]) == conn:
+            method = m["method"]
+    return method
 
 
 def _strict_ok(ctx: AuditContext, absolute: str, owner_uid: int) -> bool:

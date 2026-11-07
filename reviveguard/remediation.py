@@ -47,6 +47,7 @@ class FixSpec:
     change_args: dict[str, str] = field(default_factory=dict)
     service_key: str | None = None
     disruptive: bool = False
+    reload_service: str | None = None  # service to reload after 'reviveguard rollback'
     undo: Callable[[], None] | None = None  # undo runtime state after files were restored
     confirm_key: str | None = None  # needs the user's live confirmation (i18n key), else revert
     confirm_args: dict[str, str] = field(default_factory=dict)
@@ -120,7 +121,13 @@ def run_fix(
     """Execute one fix. Never leaves a half-applied change if it can be avoided."""
     try:
         op = begin_operation(
-            store, spec.check_id, spec.fix_id, spec.description, spec.files, spec.reversible
+            store,
+            spec.check_id,
+            spec.fix_id,
+            spec.description,
+            spec.files,
+            spec.reversible,
+            reload_service=spec.reload_service,
         )
     except BackupError as exc:
         return Outcome("backup_failed", detail=str(exc))

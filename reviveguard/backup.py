@@ -70,6 +70,7 @@ class Operation:
     files: list[FileRecord] = field(default_factory=list)
     note: str = ""
     rolled_back_at: str | None = None
+    reload_service: str | None = None  # 'ssh' / 'fail2ban': reloaded after a rollback
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -178,6 +179,7 @@ def begin_operation(
     paths: list[Path],
     reversible: bool = True,
     now: Callable[[], str] = utc_now,
+    reload_service: str | None = None,
 ) -> Operation:
     """Back up ``paths`` and record the intended change. Call before modifying anything.
 
@@ -205,6 +207,7 @@ def begin_operation(
             description=description,
             reversible=reversible,
             files=records,
+            reload_service=reload_service,
         )
         store.save(op)
     except (BackupError, OSError) as exc:

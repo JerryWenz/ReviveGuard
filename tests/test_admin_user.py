@@ -284,3 +284,92 @@ def test_wizard_offers_admin_account_and_stops_for_reconnect(host, capsys, monke
     rc, out, err = run_cli(["wizard"], ctx, capsys, monkeypatch, tmp_path, answers=answers)
     assert (ctx.root / "home/ops/.ssh/authorized_keys").exists()
     assert "Account created" in out and "sudo reviveguard wizard" in out
+
+
+# ---------------- the key is optional ----------------
+
+
+def test_admin_without_a_key_is_created_and_usr001_stays_open(host, store):
+    runner, ctx = host
+    spec = plan_admin_user(ctx, "ops", None)
+    assert isinstance(spec, FixSpec) and spec.next_key == "fix.next.admin_user_nokey"
+    assert all("authorized_keys" not in str(f) for f in spec.files)
+    outcome = run_fix(store, ctx, spec)
+    assert outcome.status == "applied", outcome
+    assert "ops:x:1500" in (ctx.root / "etc/passwd").read_text()
+    assert not (ctx.root / "home/ops/.ssh/authorized_keys").exists()
+    assert {r.check_id: r.status for r in accounts.run(ctx)}["USR-001"] is Status.FAIL
+
+
+def test_add_key_later_completes_the_setup_and_keeps_existing_keys(host, store):
+    from reviveguard.fixes.access import plan_add_key
+
+    runner, ctx = host
+    assert run_fix(store, ctx, plan_admin_user(ctx, "ops", None)).status == "applied"
+    first = plan_add_key(ctx, "ops", KEY)
+    assert isinstance(first, FixSpec) and run_fix(store, ctx, first).status == "applied"
+    keys = ctx.root / "home/ops/.ssh/authorized_keys"
+    assert keys.read_text() == KEY + "\n" and stat.S_IMODE(keys.stat().st_mode) == 0o600
+    other = make_key("ssh-rsa", "second")
+    assert run_fix(store, ctx, plan_add_key(ctx, "ops", other)).status == "applied"
+    assert keys.read_text().splitlines() == [KEY, other]
+    assert run_fix(store, ctx, plan_add_key(ctx, "ops", KEY)).status == "applied"  # idempotent
+    assert keys.read_text().splitlines() == [KEY, other]
+    assert {r.check_id: r.status for r in accounts.run(ctx)}["USR-001"] is Status.OK
+
+
+def test_add_key_refusals(host):
+    from reviveguard.fixes.access import plan_add_key
+
+    _, ctx = host
+    assert plan_add_key(ctx, "ghost", KEY).reason_key == "admin.err.no_such_user"
+    assert plan_add_key(ctx, "root", KEY).reason_key == "admin.err.no_such_user"
+    with open(ctx.root / "etc/passwd", "a") as fh:
+        fh.write("ops:x:1500:1500::/home/ops:/bin/bash\n")
+    assert plan_add_key(ctx, "ops", "junk").reason_key == "admin.err.bad_key"
+
+
+def test_cli_no_key_and_add_key(host, capsys, monkeypatch, tmp_path):
+    _, ctx = host
+    rc, out, _ = run_cli(
+        ["admin-user", "--name", "ops", "--no-key", "--yes"], ctx, capsys, monkeypatch, tmp_path
+    )
+    assert rc == 0 and "reviveguard add-key --name ops" in out
+    key_file = tmp_path / "k.pub"
+    key_file.write_text(KEY + "\n")
+    rc, out, _ = run_cli(
+        ["add-key", "--name", "ops", "--key-file", str(key_file), "--yes"],
+        ctx,
+        capsys,
+        monkeypatch,
+        tmp_path,
+    )
+    assert rc == 0 and (ctx.root / "home/ops/.ssh/authorized_keys").exists()
+    assert "sudo reviveguard wizard" in out
+
+
+def test_pressing_enter_on_the_key_prompt_creates_the_account_without_a_key(
+    host, capsys, monkeypatch, tmp_path
+):
+    _, ctx = host
+    rc, out, _ = run_cli(
+        ["admin-user"], ctx, capsys, monkeypatch, tmp_path, answers=["ops", "", "y"]
+    )
+    assert rc == 0 and "WITHOUT a login key" in out
+    assert "ops:x:1500" in (ctx.root / "etc/passwd").read_text()
+
+
+def test_wizard_skips_risky_steps_when_the_admin_was_not_created(
+    make_ctx, fake_root, capsys, monkeypatch, tmp_path
+):
+    """The real incident: bad key input must not lead on to disabling root/password login."""
+    monkeypatch.setattr(os, "chown", lambda *a: None)
+    users = {"root": {"uid": 0, "key": True}}
+    build_host(fake_root, users, SSHD_MAIN)
+    (fake_root / "etc/group").write_text("sudo:x:27:\n")
+    ctx = make_ctx(runner=UserHost(fake_root, ssh_runner()), env={})
+    answers = ["n", "y", "ops", "this is not a key"]  # safe set no, admin yes, name, BAD key
+    rc, out, err = run_cli(["wizard"], ctx, capsys, monkeypatch, tmp_path, answers=answers)
+    assert "not created" in out
+    assert not list((fake_root / "etc/ssh/sshd_config.d").glob("*permitrootlogin*"))
+    assert not list((fake_root / "etc/ssh/sshd_config.d").glob("*passwordauthentication*"))

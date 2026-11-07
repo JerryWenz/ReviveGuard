@@ -47,6 +47,7 @@ def plan_ssh_jail(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
         change_key="fix.fail2ban.enable_jail",
         change_args={"path": f"{JAIL_DIR}/{DROPIN}", "port": port},
         service_key="fix.service.reload_fail2ban",
+        reload_service="fail2ban",
     )
 
 
@@ -145,5 +146,6 @@ def plan_install(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
         change_key="fix.fail2ban.install",
         change_args={"ip": ip or "-", "packages": what},
         service_key="fix.service.start_fail2ban",
+        reload_service="fail2ban",
         packages=wanted,
     )
