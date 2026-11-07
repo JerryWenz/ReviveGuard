@@ -141,3 +141,142 @@ def test_rollback_nothing_and_unknown_id(make_ctx, capsys, monkeypatch, tmp_path
     assert rc == 1 and "not found" in err
     rc, _, err = run_cli([*base, "--id", "../x"], make_ctx(), capsys, monkeypatch, tmp_path)
     assert rc == 1
+
+
+# ---------- fix command ----------
+
+
+def fix_args(tmp_path, *extra, lang="en"):
+    return ["--lang", lang, "--state-dir", str(tmp_path / "state"), "fix", *extra]
+
+
+def answers(monkeypatch, *values):
+    it = iter(values)
+
+    def fake_input(prompt=""):
+        try:
+            return next(it)
+        except StopIteration:
+            raise EOFError from None
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+
+def fix_host(fake_root):
+    from .conftest import SSHD_MAIN, build_host
+
+    users = {"alice": {"uid": 1000, "sudo": True, "key": True}}
+    build_host(fake_root, users, SSHD_MAIN + "PermitEmptyPasswords yes\n")
+
+
+def fix_ctx(make_ctx, **kw):
+    from .conftest import ssh_runner
+
+    return make_ctx(runner=ssh_runner(), env={"SUDO_USER": "alice"}, **kw)
+
+
+def dropin(fake_root, name):
+    return fake_root / f"etc/ssh/sshd_config.d/00-reviveguard-{name}.conf"
+
+
+def test_fix_interactive_apply_one_skip_other(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
+    fix_host(fake_root)
+    answers(monkeypatch, "y", "n")
+    rc, out, _ = run_cli(fix_args(tmp_path), fix_ctx(make_ctx), capsys, monkeypatch, tmp_path)
+    # SSH-002 asks y, then the disruptive confirmation gets "n" -> skipped; SSH-003 gets EOF -> quit
+    assert rc == 0
+    assert "Skipped." in out and "Stopped by user." in out
+    assert not dropin(fake_root, "passwordauthentication").exists()
+
+
+def test_fix_applies_after_confirmation_and_verifies(
+    make_ctx, fake_root, capsys, monkeypatch, tmp_path
+):
+    fix_host(fake_root)
+    answers(monkeypatch, "y")  # SSH-003 is not disruptive: one confirmation is enough
+    rc, out, _ = run_cli(
+        fix_args(tmp_path, "--check", "ssh-003"), fix_ctx(make_ctx), capsys, monkeypatch, tmp_path
+    )
+    assert rc == 0 and "Applied and verified" in out and "Applied: 1" in out
+    assert "PermitEmptyPasswords no" in dropin(fake_root, "permitemptypasswords").read_text()
+    # the shown plan includes risk, change, files and the service note
+    assert "Proposed change" in out and "sshd_config.d" in out and "reloaded (not restarted)" in out
+
+
+def test_fix_disruptive_requires_separate_yes(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
+    fix_host(fake_root)
+    answers(monkeypatch, "y", "y")  # "y" is not enough for the disruptive confirmation
+    rc, out, _ = run_cli(
+        fix_args(tmp_path, "--check", "SSH-002"), fix_ctx(make_ctx), capsys, monkeypatch, tmp_path
+    )
+    assert "Skipped." in out and not dropin(fake_root, "passwordauthentication").exists()
+    answers(monkeypatch, "y", "yes")
+    rc, out, _ = run_cli(
+        fix_args(tmp_path, "--check", "SSH-002"), fix_ctx(make_ctx), capsys, monkeypatch, tmp_path
+    )
+    assert rc == 0 and dropin(fake_root, "passwordauthentication").exists()
+
+
+def test_fix_no_terminal_changes_nothing(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
+    fix_host(fake_root)
+    answers(monkeypatch)  # immediate EOF
+    rc, out, _ = run_cli(fix_args(tmp_path), fix_ctx(make_ctx), capsys, monkeypatch, tmp_path)
+    assert rc == 0 and not list((fake_root / "etc/ssh/sshd_config.d").iterdir())
+
+
+def test_fix_requires_root(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
+    fix_host(fake_root)
+    rc, _, err = run_cli(
+        fix_args(tmp_path), fix_ctx(make_ctx, root=False), capsys, monkeypatch, tmp_path
+    )
+    assert rc == 1 and "must be run as root" in err
+
+
+def test_fix_auto_not_implemented(make_ctx, capsys, monkeypatch, tmp_path):
+    rc, _, err = run_cli(fix_args(tmp_path, "--auto"), make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 2 and "not implemented" in err
+
+
+def test_fix_disabled_in_config(make_ctx, capsys, monkeypatch, tmp_path):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[remediation]\nenabled = false\n")
+    args = ["--config", str(cfg), *fix_args(tmp_path)]
+    rc, _, err = run_cli(args, make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 1 and "disabled" in err
+
+
+def test_fix_lists_manual_when_unsafe_and_russian(
+    make_ctx, fake_root, capsys, monkeypatch, tmp_path
+):
+    from .conftest import SSHD_MAIN, build_host, ssh_runner
+
+    build_host(fake_root, {"alice": {"uid": 1000, "sudo": True, "password": True}}, SSHD_MAIN)
+    ctx = make_ctx(runner=ssh_runner(), env={"SUDO_USER": "alice", "SSH_CONNECTION": "a b c d"})
+    answers(monkeypatch)
+    rc, out, _ = run_cli(
+        fix_args(tmp_path, "--category", "ssh", lang="ru"), ctx, capsys, monkeypatch, tmp_path
+    )
+    assert rc == 0 and "Требуется ручное исправление" in out and "вручную: 1" in out
+    assert not list((fake_root / "etc/ssh/sshd_config.d").iterdir())
+
+
+def test_fix_reports_failure_and_revert(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
+    from .test_fixes_ssh import FlakyRunner
+
+    fix_host(fake_root)
+    ctx = fix_ctx(make_ctx)
+    ctx.runner = FlakyRunner(ctx.runner)
+    answers(monkeypatch, "y")
+    rc, _, err = run_cli(
+        fix_args(tmp_path, "--check", "SSH-003"), ctx, capsys, monkeypatch, tmp_path
+    )
+    assert rc == 1 and "was reverted" in err and "restored" in err
+    assert not dropin(fake_root, "permitemptypasswords").exists()
+
+
+def test_fix_nothing_to_do(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
+    fix_host(fake_root)
+    rc, out, _ = run_cli(
+        fix_args(tmp_path, "--check", "NOPE-1"), fix_ctx(make_ctx), capsys, monkeypatch, tmp_path
+    )
+    assert rc == 0 and "No matching findings" in out

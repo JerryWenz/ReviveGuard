@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import glob
 import stat as stat_mod
+from pathlib import Path
 
 from reviveguard.context import AuditContext
 from reviveguard.models import CheckResult, Severity, Status
@@ -22,6 +23,16 @@ DEFAULTS = {
     "pubkeyauthentication": "yes",
 }
 MAX_INCLUDE_DEPTH = 5
+# Keys whose repeated occurrences accumulate instead of "first match wins".
+MULTI_VALUED = {"allowusers", "denyusers", "allowgroups", "denygroups"}
+
+
+def _store(result: dict[str, str], key: str, value: str) -> None:
+    """Values keep their original case (user names and paths are case-sensitive)."""
+    if key in MULTI_VALUED:
+        result[key] = f"{result[key]} {value}" if key in result else value
+    elif key and key not in result:
+        result[key] = value
 
 
 def parse_sshd_t(output: str) -> dict[str, str]:
@@ -29,8 +40,7 @@ def parse_sshd_t(output: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for line in output.splitlines():
         key, _, value = line.strip().partition(" ")
-        if key and key not in result:
-            result[key.lower()] = value.strip().lower()
+        _store(result, key.lower(), value.strip())
     return result
 
 
@@ -48,7 +58,7 @@ def parse_config_text(ctx: AuditContext, text: str, result: dict[str, str], dept
             key, _, value = line.partition("=")
         else:
             key, _, value = line.partition(" ")
-        key, value = key.strip().lower(), value.strip().strip('"').lower()
+        key, value = key.strip().lower(), value.strip().strip('"')
         if key == "match":
             return False
         if key == "include" and depth < MAX_INCLUDE_DEPTH:
@@ -56,14 +66,13 @@ def parse_config_text(ctx: AuditContext, text: str, result: dict[str, str], dept
                 pattern = pattern if pattern.startswith("/") else f"/etc/ssh/{pattern}"
                 for found in sorted(glob.glob(str(ctx.path(pattern)))):
                     try:
-                        sub = open(found, encoding="utf-8", errors="replace").read()  # noqa: SIM115
+                        sub = Path(found).read_text(encoding="utf-8", errors="replace")
                     except OSError:
                         continue
                     if not parse_config_text(ctx, sub, result, depth + 1):
                         return False
             continue
-        if key and key not in result:
-            result[key] = value
+        _store(result, key, value)
     return True
 
 
@@ -131,28 +140,28 @@ def run(ctx: AuditContext) -> list[CheckResult]:
     def ev(key: str) -> str:
         return f"{key}={cfg.get(key, 'unset')} (source: {source})"
 
-    root_login = cfg.get("permitrootlogin", DEFAULTS["permitrootlogin"])
+    root_login = cfg.get("permitrootlogin", DEFAULTS["permitrootlogin"]).lower()
     results = [
         _result("SSH-001", "root_login", Severity.HIGH, root_login == "yes", ev("permitrootlogin")),
         _result(
             "SSH-002",
             "password_auth",
             Severity.MEDIUM,
-            cfg.get("passwordauthentication", "yes") == "yes",
+            cfg.get("passwordauthentication", "yes").lower() == "yes",
             ev("passwordauthentication"),
         ),
         _result(
             "SSH-003",
             "empty_passwords",
             Severity.CRITICAL,
-            cfg.get("permitemptypasswords", "no") == "yes",
+            cfg.get("permitemptypasswords", "no").lower() == "yes",
             ev("permitemptypasswords"),
         ),
         _result(
             "SSH-004",
             "pubkey_auth",
             Severity.MEDIUM,
-            cfg.get("pubkeyauthentication", "yes") != "yes",
+            cfg.get("pubkeyauthentication", "yes").lower() != "yes",
             ev("pubkeyauthentication"),
         ),
     ]

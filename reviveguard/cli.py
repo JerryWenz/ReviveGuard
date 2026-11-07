@@ -11,8 +11,11 @@ from reviveguard import __version__
 from reviveguard.backup import STATE_DIR, BackupError, Store
 from reviveguard.config import Config, ConfigError, load_config
 from reviveguard.context import AuditContext
+from reviveguard.fixes import REGISTRY as FIXERS
 from reviveguard.i18n import FALLBACK_LANGUAGE, Translator, available_languages
+from reviveguard.models import Status
 from reviveguard.output import render_json, render_text
+from reviveguard.remediation import FixSpec, Manual, preflight, run_fix
 from reviveguard.rollback import RollbackError, execute_rollback, plan_rollback
 from reviveguard.scanner import run_audit
 
@@ -28,6 +31,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
     audit = sub.add_parser("audit", help="read-only security audit (default)")
     audit.add_argument("--format", choices=("text", "json"), default="text")
+    fix = sub.add_parser("fix", help="review and apply fixes interactively")
+    fix.add_argument("--category", help="only findings of this category (e.g. ssh)")
+    fix.add_argument("--check", help="only this check ID (e.g. SSH-002)")
+    fix.add_argument("--auto", action="store_true", help="(not implemented yet)")
     sub.add_parser("history", help="list recorded remediation operations")
     rollback = sub.add_parser("rollback", help="restore files changed by an operation")
     rollback.add_argument("--id", help="operation id, e.g. FIX-2026-001 (default: latest)")
@@ -69,6 +76,8 @@ def main(argv: list[str] | None = None, ctx: AuditContext | None = None) -> int:
     t = Translator(lang)
 
     store = Store(args.state_dir)
+    if command == "fix":
+        return cmd_fix(t, store, ctx or AuditContext(), config, args)
     if command == "history":
         return cmd_history(t, store)
     if command == "rollback":
@@ -145,3 +154,88 @@ def cmd_rollback(t: Translator, store: Store, op_id: str | None, assume_yes: boo
         return 1
     print(t("rollback.done", id=op.op_id))
     return 0
+
+
+def _ask(prompt: str) -> str:
+    try:
+        return input(prompt).strip().lower()
+    except EOFError:
+        return "q"  # no terminal: never assume consent
+
+
+def _describe(t: Translator, ctx: AuditContext, result, spec: FixSpec) -> None:
+    print(f"\n{t('fix.header', check_id=result.check_id, title=t(result.title_key))}")
+    print(f"  {t('fix.risk')}: {t(result.description_key)}")
+    for item in result.evidence:
+        print(f"  {t('label.evidence')}: {item}")
+    print(f"  {t('fix.change')}: {t(spec.change_key, **spec.change_args)}")
+    affected = ", ".join(str(p).replace(str(ctx.root).rstrip("/"), "", 1) for p in spec.files)
+    print(f"  {t('fix.affects')}: {affected}")
+    if spec.service_key:
+        print(f"  {t(spec.service_key)}")
+    print(f"  {t('fix.backup_note')}")
+
+
+def cmd_fix(t, store: Store, ctx: AuditContext, config: Config, args) -> int:
+    if args.auto:
+        print(t("fix.err.auto_not_implemented"), file=sys.stderr)
+        return 2
+    if not config.remediation.enabled:
+        print(t("fix.err.disabled"), file=sys.stderr)
+        return 1
+    problem = preflight(ctx)
+    if problem:
+        print(t(problem), file=sys.stderr)
+        return 1
+    report = run_audit(ctx, config)
+    findings = [
+        r
+        for r in report.results
+        if r.status is Status.FAIL
+        and (not args.category or r.category == args.category.lower())
+        and (not args.check or r.check_id == args.check.upper())
+    ]
+    if not findings:
+        print(t("fix.nothing"))
+        return 0
+    counts = {"applied": 0, "skipped": 0, "manual": 0, "failed": 0}
+    exit_code = 0
+    for result in findings:
+        planner = FIXERS.get(result.check_id)
+        plan = planner(ctx, result) if planner else Manual("fix.reason.no_autofix")
+        if isinstance(plan, Manual):
+            counts["manual"] += 1
+            title = t(result.title_key)
+            reason = t(plan.reason_key, **plan.args)
+            print(f"\n[{result.check_id}] {title}\n  {t('fix.manual', reason=reason)}")
+            print(f"  {t('label.remediation')}: {t(result.remediation_key)}")
+            continue
+        _describe(t, ctx, result, plan)
+        answer = _ask(t("fix.prompt"))
+        if answer == "q":
+            print(t("fix.quit"))
+            break
+        if answer not in ("y", "yes"):
+            counts["skipped"] += 1
+            print(t("fix.skipped"))
+            continue
+        if plan.disruptive and _ask(t("fix.prompt_disruptive")) != "yes":
+            counts["skipped"] += 1
+            print(t("fix.skipped"))
+            continue
+        outcome = run_fix(store, ctx, plan)
+        if outcome.status == "applied":
+            counts["applied"] += 1
+            print(t("fix.result.applied", id=outcome.op_id))
+            continue
+        counts["failed"] += 1
+        exit_code = 1
+        print(
+            t(f"fix.result.{outcome.status}", detail=outcome.detail, id=outcome.op_id),
+            file=sys.stderr,
+        )
+        if outcome.reverted:
+            key = "fix.result.reverted" if outcome.revert_ok else "fix.result.revert_failed"
+            print(t(key, id=outcome.op_id), file=sys.stderr)
+    print("\n" + t("fix.summary", **counts))
+    return exit_code

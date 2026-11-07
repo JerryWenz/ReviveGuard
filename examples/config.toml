@@ -14,7 +14,7 @@ permissions = true  # not implemented yet
 services = true     # not implemented yet
 sysctl = true       # not implemented yet
 
-[remediation]       # reserved: remediation is not implemented yet
+[remediation]       # `enabled = false` disables `fix`; allow_* apply to future `fix --auto`
 enabled = true
 require_confirmation = true
 allow_critical = false
