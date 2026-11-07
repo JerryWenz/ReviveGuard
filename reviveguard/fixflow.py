@@ -110,6 +110,8 @@ def apply_item(con: Console, store: Store, ctx: AuditContext, item: Item) -> boo
     outcome = run_fix(store, ctx, spec)
     if outcome.status == "applied":
         con.say(f"  {s.paint('OK', 'green', 'bold')} {t('fix.result.applied', id=outcome.op_id)}")
+        if spec.next_key:
+            con.say(f"  {s.bold(t('fix.next'))} {t(spec.next_key, **spec.next_args)}")
         return True
     msg = t(f"fix.result.{outcome.status}", detail=outcome.detail, id=outcome.op_id)
     con.say(f"  {s.paint('FAILED', 'red', 'bold')} {msg}", err=True)

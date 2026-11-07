@@ -249,7 +249,7 @@ def test_fix_lists_manual_when_unsafe_and_russian(
     ctx = make_ctx(runner=ssh_runner(), env={"SUDO_USER": "alice", "SSH_CONNECTION": "a b c d"})
     answers(monkeypatch)
     rc, out, _ = run_cli(
-        fix_args(tmp_path, "--category", "ssh", lang="ru"), ctx, capsys, monkeypatch, tmp_path
+        fix_args(tmp_path, "--check", "SSH-002", lang="ru"), ctx, capsys, monkeypatch, tmp_path
     )
     assert rc == 0 and "Требуется ручное исправление" in out and "вручную: 1" in out
     assert not list((fake_root / "etc/ssh/sshd_config.d").iterdir())

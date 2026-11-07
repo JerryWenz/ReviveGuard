@@ -21,10 +21,63 @@ DEFAULTS = {
     "passwordauthentication": "yes",
     "permitemptypasswords": "no",
     "pubkeyauthentication": "yes",
+    "x11forwarding": "no",
+    "maxauthtries": "6",
+    "logingracetime": "120",
+    "port": "22",
 }
+MAX_AUTH_TRIES = 4
+MAX_GRACE_SECONDS = 60
+WEAK_CIPHERS = ("3des", "arcfour", "blowfish", "cast128")
+WEAK_MACS = ("md5", "-sha1-96", "ripemd160", "umac-64")
+WEAK_KEX = (
+    "diffie-hellman-group1-sha1",
+    "diffie-hellman-group14-sha1",
+    "diffie-hellman-group-exchange-sha1",
+)
+
+
+def parse_seconds(value: str) -> int | None:
+    """sshd time values: plain seconds or with s/m/h/d/w suffixes (``2m``, ``1h30m``)."""
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+    total, number = 0, ""
+    for ch in value.strip().lower():
+        if ch.isdigit():
+            number += ch
+        elif ch in units and number:
+            total, number = total + int(number) * units[ch], ""
+        else:
+            return None
+    return total + int(number) if number else (total if value.strip() else None)
+
+
+def ports_of(cfg: dict[str, str]) -> list[str]:
+    return [p for p in cfg.get("port", "22").split() if p.isdigit()] or ["22"]
+
+
+def weak_algorithms(cfg: dict[str, str]) -> dict[str, list[str]]:
+    """Weak entries present in the *effective* (sshd -T) algorithm lists."""
+    found: dict[str, list[str]] = {}
+    for key, marks, exact in (
+        ("ciphers", WEAK_CIPHERS, False),
+        ("macs", WEAK_MACS, False),
+        ("kexalgorithms", WEAK_KEX, True),
+    ):
+        names = [n for n in cfg.get(key, "").split(",") if n]
+        weak = [
+            n
+            for n in names
+            if (n in marks if exact else any(m in n for m in marks))
+            or (key == "ciphers" and n.endswith("-cbc"))
+        ]
+        if weak:
+            found[key] = weak
+    return found
+
+
 MAX_INCLUDE_DEPTH = 5
 # Keys whose repeated occurrences accumulate instead of "first match wins".
-MULTI_VALUED = {"allowusers", "denyusers", "allowgroups", "denygroups"}
+MULTI_VALUED = {"allowusers", "denyusers", "allowgroups", "denygroups", "port"}
 
 
 def _store(result: dict[str, str], key: str, value: str) -> None:
@@ -94,7 +147,7 @@ def _result(
     name: str,
     severity: Severity,
     failed: bool,
-    evidence: str,
+    evidence: str | list[str],
     restart: bool = True,
 ) -> CheckResult:
     return CheckResult(
@@ -105,7 +158,7 @@ def _result(
         title_key=f"ssh.{name}.title",
         description_key=f"ssh.{name}.desc",
         remediation_key=f"ssh.{name}.fix",
-        evidence=(evidence,),
+        evidence=(evidence,) if isinstance(evidence, str) else tuple(evidence),
         restart_required=restart,
     )
 
@@ -165,6 +218,54 @@ def run(ctx: AuditContext) -> list[CheckResult]:
             ev("pubkeyauthentication"),
         ),
     ]
+    grace = parse_seconds(cfg.get("logingracetime", "120"))
+    ports = ports_of(cfg)
+    results += [
+        _result(
+            "SSH-006",
+            "x11_forwarding",
+            Severity.LOW,
+            cfg.get("x11forwarding", "no").lower() == "yes",
+            ev("x11forwarding"),
+        ),
+        _result(
+            "SSH-007",
+            "max_auth_tries",
+            Severity.LOW,
+            not cfg.get("maxauthtries", "6").isdigit()
+            or int(cfg.get("maxauthtries", "6")) > MAX_AUTH_TRIES,
+            ev("maxauthtries"),
+            restart=True,
+        ),
+        _result(
+            "SSH-008",
+            "grace_time",
+            Severity.LOW,
+            grace is None or grace == 0 or grace > MAX_GRACE_SECONDS,
+            ev("logingracetime"),
+        ),
+        _result(
+            "SSH-010",
+            "default_port",
+            Severity.LOW,
+            ports == ["22"],
+            [f"port={' '.join(ports)} (source: {source})"],
+        ),
+    ]
+    if len(ports) > 1 and "22" in ports:
+        results.append(
+            _result(
+                "SSH-011",
+                "port_migration",
+                Severity.LOW,
+                True,
+                [f"sshd listens on ports {', '.join(ports)}; 22 is still open"],
+            )
+        )
+    if source.startswith("sshd -T"):
+        weak = weak_algorithms(cfg)
+        evidence = [f"{k}: {', '.join(v)}" for k, v in weak.items()] or ["no weak algorithms"]
+        results.append(_result("SSH-009", "weak_algorithms", Severity.MEDIUM, bool(weak), evidence))
     perms = _permissions_check(ctx)
     if perms is not None:
         results.append(perms)

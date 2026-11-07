@@ -10,7 +10,19 @@ from reviveguard.checks import permissions, sysctl
 from reviveguard.i18n import _DIR, available_languages
 
 DYNAMIC = {
-    "ssh": ["root_login", "password_auth", "empty_passwords", "pubkey_auth", "config_perms"],
+    "ssh": [
+        "root_login",
+        "password_auth",
+        "empty_passwords",
+        "pubkey_auth",
+        "config_perms",
+        "x11_forwarding",
+        "max_auth_tries",
+        "grace_time",
+        "weak_algorithms",
+        "default_port",
+        "port_migration",
+    ],
     "firewall": ["active", "default_policy", "dangerous_rules", "conflict"],
     "fail2ban": ["running", "config_valid", "ssh_jail", "log_backend", "ban_settings"],
     "updates": ["index_fresh", "security_updates", "reboot", "auto_updates", "os_supported"],
