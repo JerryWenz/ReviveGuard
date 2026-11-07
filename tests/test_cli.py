@@ -73,3 +73,71 @@ def test_non_root_note(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
     write_sshd_config(fake_root, "")
     _, out, _ = run_cli(["--lang", "en"], make_ctx(root=False), capsys, monkeypatch, tmp_path)
     assert "Not running as root" in out
+
+
+def _make_op(tmp_path, content="PermitRootLogin yes\n"):
+    from reviveguard.backup import Store, begin_operation, mark_applied
+
+    f = tmp_path / "target.conf"
+    f.write_text(content)
+    store = Store(tmp_path / "state")
+    op = begin_operation(store, "SSH-001", "ssh.x", "disable root login", [f])
+    f.write_text("changed\n")
+    mark_applied(store, op)
+    return f, op
+
+
+def test_history_empty_and_listing(make_ctx, capsys, monkeypatch, tmp_path):
+    base = ["--lang", "en", "--state-dir", str(tmp_path / "state")]
+    _, out, _ = run_cli([*base, "history"], make_ctx(), capsys, monkeypatch, tmp_path)
+    assert "No remediation history." in out
+    _, op = _make_op(tmp_path)
+    _, out, _ = run_cli([*base, "history"], make_ctx(), capsys, monkeypatch, tmp_path)
+    assert op.op_id in out and "SSH-001" in out and "applied" in out
+
+
+def test_rollback_confirm_yes(make_ctx, capsys, monkeypatch, tmp_path):
+    f, op = _make_op(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    args = ["--lang", "ru", "--state-dir", str(tmp_path / "state"), "rollback", "--id", op.op_id]
+    rc, out, _ = run_cli(args, make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 0 and "выполнен и проверен" in out and f.read_text() == "PermitRootLogin yes\n"
+    assert "восстановить" in out
+
+
+def test_rollback_declined_changes_nothing(make_ctx, capsys, monkeypatch, tmp_path):
+    f, op = _make_op(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+    args = ["--lang", "en", "--state-dir", str(tmp_path / "state"), "rollback"]
+    rc, out, _ = run_cli(args, make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 1 and "Cancelled" in out and f.read_text() == "changed\n"
+
+
+def test_rollback_eof_is_decline(make_ctx, capsys, monkeypatch, tmp_path):
+    f, _ = _make_op(tmp_path)
+
+    def eof(prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", eof)
+    args = ["--lang", "en", "--state-dir", str(tmp_path / "state"), "rollback"]
+    rc, _, _ = run_cli(args, make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 1 and f.read_text() == "changed\n"
+
+
+def test_rollback_yes_flag_and_warning(make_ctx, capsys, monkeypatch, tmp_path):
+    f, op = _make_op(tmp_path)
+    f.write_text("admin edit\n")
+    args = ["--lang", "en", "--state-dir", str(tmp_path / "state"), "rollback", "--yes"]
+    rc, out, _ = run_cli(args, make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 0 and "WARNING" in out and f.read_text() == "PermitRootLogin yes\n"
+
+
+def test_rollback_nothing_and_unknown_id(make_ctx, capsys, monkeypatch, tmp_path):
+    base = ["--lang", "en", "--state-dir", str(tmp_path / "state"), "rollback"]
+    rc, out, _ = run_cli(base, make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 0 and "No operations available" in out
+    rc, _, err = run_cli([*base, "--id", "FIX-2026-042"], make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 1 and "not found" in err
+    rc, _, err = run_cli([*base, "--id", "../x"], make_ctx(), capsys, monkeypatch, tmp_path)
+    assert rc == 1

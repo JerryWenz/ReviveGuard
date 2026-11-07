@@ -10,11 +10,13 @@ Lightweight Linux server security auditor with (planned) controlled auto-remedia
 - `reviveguard audit` — read-only; never modifies the system.
 - SSH checks `SSH-001`..`SSH-005`: root login, password authentication, empty passwords,
   public key authentication, `sshd_config` ownership/permissions.
+- `reviveguard history` / `reviveguard rollback [--id FIX-YYYY-NNN] [--yes]` — backup store and
+  rollback engine (used by future fixes; covered by tests, but no fix creates operations yet).
 - Output in English and Russian (`--lang en|ru`), plain text or JSON.
 
 ## Not implemented yet
 
-`fix`, `rollback`, `history`, `report`, `config set`, and the firewall, fail2ban, Docker,
+`fix`, `report`, `config set`, and the firewall, fail2ban, Docker,
 updates, permissions, services and sysctl checks. See the roadmap below.
 
 ## Requirements and tested platforms
@@ -49,6 +51,22 @@ Language priority: `--lang`, config `language`, locale (`LANG`), English.
 - Evidence contains configuration values only, never secrets.
 - Future remediation will never change access (SSH, firewall) without backup, validation,
   verification and explicit confirmation. Package upgrades will be documented as non-reversible.
+
+## Backup and rollback
+
+State lives in `/var/lib/reviveguard` (`backups/`, `history/`, `reports/`, `config/`; mode 0700;
+override with `--state-dir`). Before a fix changes a file, its content, mode and owner are saved
+with a SHA-256 checksum, and the operation is recorded (check ID, remediation ID, intended change)
+*before* the change, so an interrupted operation can still be rolled back.
+
+`rollback` shows what will be restored, warns if a file was edited after the fix, validates the
+backup checksum, asks for confirmation (or `--yes`), restores only the files of that operation,
+and verifies content, mode and owner afterwards. It does **not** restart services: after rolling
+back a service configuration, reload it yourself.
+
+Limitations: package upgrades and external service changes cannot be reliably reversed and will
+be recorded as non-reversible; symlinks are refused rather than backed up; backups of
+sensitive files (e.g. `/etc/shadow`) are stored with mode 0600 inside a 0700 directory.
 
 ## Known limitations
 
