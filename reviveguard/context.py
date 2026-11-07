@@ -21,6 +21,7 @@ class AuditContext:
     stat: Callable[[Path], os.stat_result] = os.stat
     os_info: OsInfo = field(default_factory=detect_os)
     running_as_root: bool = field(default_factory=is_root)
+    env: dict[str, str] = field(default_factory=lambda: dict(os.environ))
 
     def path(self, absolute: str) -> Path:
         """Map an absolute host path under ``root`` (``/`` on a real system)."""

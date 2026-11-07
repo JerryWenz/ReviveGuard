@@ -21,6 +21,15 @@ interfaces between minor releases.
   backup validation, confirmation and post-restore verification.
 - Verification helpers (re-run a check, verify restored files).
 
+- `reviveguard fix [--category C] [--check ID]`: interactive remediation for `SSH-001`..`SSH-005`
+  (explain, show change and files, back up, confirm, apply, `sshd -t`, reload, verify, record).
+  Any failure after the change started restores the original files automatically.
+- SSH lockout prevention (`ssh_access.py`): fixes that could remove access are refused
+  (manual remediation) unless a working alternative is verified.
+
+### Changed
+- sshd configuration values keep their original case (user names and paths are case-sensitive).
+
 ### Not implemented yet
-Remediation (`fix`) itself, reports, and all check modules except SSH. Backup and rollback are
-in place but nothing creates operations yet, so `history` is empty on a fresh system.
+`fix --auto`, reports, and all check modules except SSH. Fixes exist only for SSH and have
+not been exercised against a real `sshd` yet (see README, Known limitations).

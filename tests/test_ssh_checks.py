@@ -15,8 +15,19 @@ def test_parse_sshd_t_lowercases_and_keeps_first():
     out = "permitrootlogin yes\nPasswordAuthentication No\nhostkey /a\nhostkey /b\n"
     parsed = ssh.parse_sshd_t(out)
     assert parsed["permitrootlogin"] == "yes"
-    assert parsed["passwordauthentication"] == "no"
+    assert parsed["passwordauthentication"] == "No"  # case kept; checks compare lowercase
     assert parsed["hostkey"] == "/a"
+
+
+def test_case_preserved_and_multivalued_keys_accumulate():
+    parsed = ssh.parse_sshd_t("allowusers Alice\nallowusers bob\nauthorizedkeysfile .ssh/Keys\n")
+    assert parsed["allowusers"] == "Alice bob"
+    assert parsed["authorizedkeysfile"] == ".ssh/Keys"
+
+
+def test_mixed_case_value_is_understood(make_ctx, fake_root):
+    write_sshd_config(fake_root, "PermitRootLogin YES\n")
+    assert by_id(ssh.run(make_ctx()))["SSH-001"].status is Status.FAIL
 
 
 def test_skipped_when_ssh_not_installed(make_ctx):
