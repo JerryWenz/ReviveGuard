@@ -28,7 +28,7 @@ class Fail2banHost:
         self.calls = []
         self.reloaded = False
 
-    def __call__(self, args):
+    def __call__(self, args, timeout=None):
         self.calls.append(list(args))
         res = lambda out="", rc=0, err="": CommandResult(tuple(args), rc, out, err)  # noqa: E731
         if args[0] == "fail2ban-client" and not self.installed:
@@ -113,10 +113,11 @@ def test_firewall_findings_are_always_manual(make_ctx):
     from reviveguard.models import CheckResult, Severity
 
     result = CheckResult("FW-001", "firewall", Severity.MEDIUM, Status.FAIL, "t", "d", "r")
-    for check_id in ("FW-001", "FW-002", "FW-003", "FW-004"):
+    for check_id in ("FW-002", "FW-003", "FW-004"):
         plan = REGISTRY[check_id](make_ctx(), result)
         assert isinstance(plan, Manual) and plan.reason_key == "fix.reason.firewall_manual"
         assert check_id not in AUTOMATIC
+    assert "FW-001" in AUTOMATIC  # only the ufw *package* install; enabling stays manual
     assert "F2B-002" in AUTOMATIC and "SSH-002" in AUTOMATIC
 
 
@@ -133,4 +134,4 @@ def test_json_reports_automatic_fix_flag(make_ctx, capsys, monkeypatch, tmp_path
     cli.main(["--lang", "en", "audit", "--format", "json"], ctx=ctx)
     data = json.loads(capsys.readouterr().out)
     flags = {r["check_id"]: r["auto_fix_supported"] for r in data["results"]}
-    assert flags.get("FW-001") is False
+    assert flags.get("FW-001") is True and flags.get("UPD-005") is False

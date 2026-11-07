@@ -47,6 +47,8 @@ class FixSpec:
     change_args: dict[str, str] = field(default_factory=dict)
     service_key: str | None = None
     disruptive: bool = False
+    reversible: bool = True  # False: e.g. package installs; recorded, rollback refuses
+    verify: Callable[[], str | None] | None = None  # None: re-run the owning check
 
 
 @dataclass
@@ -101,12 +103,16 @@ def _revert(store: Store, spec: FixSpec, op: Operation, activated: bool) -> bool
 def run_fix(store: Store, ctx: AuditContext, spec: FixSpec) -> Outcome:
     """Execute one fix. Never leaves a half-applied change if it can be avoided."""
     try:
-        op = begin_operation(store, spec.check_id, spec.fix_id, spec.description, spec.files)
+        op = begin_operation(
+            store, spec.check_id, spec.fix_id, spec.description, spec.files, spec.reversible
+        )
     except BackupError as exc:
         return Outcome("backup_failed", detail=str(exc))
 
     def fail(status: str, detail: str, activated: bool = False) -> Outcome:
         mark_failed(store, op, f"{status}: {detail}")
+        if not spec.reversible:
+            return Outcome(status, op.op_id, detail, reverted=False)
         ok = _revert(store, spec, op, activated)
         return Outcome(status, op.op_id, detail, reverted=True, revert_ok=ok)
 
@@ -114,10 +120,10 @@ def run_fix(store: Store, ctx: AuditContext, spec: FixSpec) -> Outcome:
         spec.apply()
     except BaseException as exc:  # includes KeyboardInterrupt: restore before re-raising
         mark_failed(store, op, f"apply_failed: {type(exc).__name__}")
-        ok = _revert(store, spec, op, False)
+        ok = _revert(store, spec, op, False) if spec.reversible else True
         if not isinstance(exc, Exception):
             raise
-        return Outcome("apply_failed", op.op_id, str(exc), reverted=True, revert_ok=ok)
+        return Outcome("apply_failed", op.op_id, str(exc), spec.reversible, ok)
     error = spec.validate()
     if error:
         return fail("validation_failed", error)
@@ -128,8 +134,13 @@ def run_fix(store: Store, ctx: AuditContext, spec: FixSpec) -> Outcome:
             return fail("activation_failed", str(exc), activated=True)
         if not activated_ok:
             return fail("activation_failed", "service did not accept the new configuration", True)
-    verification = verify_check_passes(ctx, spec.check_id)
-    if not verification.ok:
-        return fail("verify_failed", verification.detail, activated=spec.activate is not None)
+    if spec.verify is not None:
+        problem = spec.verify()
+        if problem:
+            return fail("verify_failed", problem, activated=spec.activate is not None)
+    else:
+        verification = verify_check_passes(ctx, spec.check_id)
+        if not verification.ok:
+            return fail("verify_failed", verification.detail, activated=spec.activate is not None)
     mark_applied(store, op)
     return Outcome("applied", op.op_id)

@@ -225,7 +225,7 @@ class FlakyRunner:
         self.base, self.fail_after, self.validations, self.calls = base, fail_after, 0, []
         self.reload_ok = reload_ok
 
-    def __call__(self, args):
+    def __call__(self, args, timeout=None):
         self.calls.append(list(args))
         if args == ["sshd", "-t"]:
             self.validations += 1

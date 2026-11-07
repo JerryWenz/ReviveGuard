@@ -21,7 +21,7 @@ class FakeRunner:
         self.responses = responses or {}
         self.calls: list[list[str]] = []
 
-    def __call__(self, args: list[str]) -> CommandResult:
+    def __call__(self, args: list[str], timeout=None) -> CommandResult:
         self.calls.append(list(args))
         return self.responses.get(tuple(args), CommandResult(tuple(args), None, missing=True))
 
