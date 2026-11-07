@@ -29,6 +29,7 @@ DYNAMIC = {
     "updates": ["index_fresh", "security_updates", "reboot", "auto_updates", "os_supported"],
     "services": ["public", "risky"],
     "time": ["ntp_sync", "timezone"],
+    "tuning": ["bbr", "ipv6", "swap"],
     "accounts": ["admin_user", "empty_password", "extra_root", "password_policy"],
     "docker": [
         "socket",

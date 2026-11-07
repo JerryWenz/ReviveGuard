@@ -14,6 +14,7 @@ from reviveguard.checks import (
     ssh,
     sysctl,
     timesync,
+    tuning,
     updates,
 )
 from reviveguard.context import AuditContext
@@ -32,6 +33,7 @@ REGISTRY: dict[str, CheckFunc] = {
     "accounts": accounts.run,
     "docker": docker.run,
     "time": timesync.run,
+    "tuning": tuning.run,
 }
 
 # Check ID prefix -> category (used to find the module that owns a check ID).
@@ -46,4 +48,5 @@ PREFIXES = {
     "USR": "accounts",
     "DOC": "docker",
     "TIME": "time",
+    "TUN": "tuning",
 }

@@ -40,6 +40,7 @@ class AuditConfig:
     sysctl: bool = True
     accounts: bool = True
     time: bool = True
+    tuning: bool = True
 
     def enabled_modules(self) -> list[str]:
         return [f.name for f in fields(self) if getattr(self, f.name)]
