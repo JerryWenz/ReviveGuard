@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import socket
 
-from reviveguard import __version__
+from reviveguard import __version__, ui
 from reviveguard.context import AuditContext
 from reviveguard.fixes import AUTOMATIC
 from reviveguard.i18n import Translator
@@ -21,11 +21,10 @@ def _tag(result: CheckResult) -> str:
     return _STATUS_TAG[result.status]
 
 
-def render_header(t: Translator, ctx: AuditContext, lang: str) -> str:
+def render_header(t: Translator, ctx: AuditContext, lang: str, style: ui.Style) -> str:
     return "\n".join(
         [
-            t("app.name"),
-            t("app.tagline"),
+            ui.banner(style, t("app.tagline"), __version__).rstrip("\n"),
             "",
             f"{t('label.system')}: {ctx.os_info.pretty_name}",
             f"{t('label.mode')}: {t('mode.audit')}",
@@ -35,24 +34,29 @@ def render_header(t: Translator, ctx: AuditContext, lang: str) -> str:
     )
 
 
-def render_text(t: Translator, ctx: AuditContext, report: AuditReport, lang: str) -> str:
-    lines = [render_header(t, ctx, lang)]
+def render_text(
+    t: Translator, ctx: AuditContext, report: AuditReport, lang: str, style: ui.Style | None = None
+) -> str:
+    style = style or ui.Style()
+    lines = [render_header(t, ctx, lang, style)]
     for r in report.results:
-        lines.append(f"[{_tag(r)}] {t(r.title_key)}")
+        lines.append(f"{style.tag(_tag(r))} {style.bold(t(r.title_key))}")
         if r.status is Status.FAIL:
-            lines.append(f"    {t(r.description_key)}")
+            lines.append(f"    {style.markup(t(r.description_key))}")
             for item in r.evidence:
-                lines.append(f"    {t('label.evidence')}: {item}")
-            lines.append(f"    {t('label.remediation')}: {t(r.remediation_key)}")
+                lines.append(f"    {t('label.evidence')}: {style.dim(item)}")
+            lines.append(f"    {t('label.remediation')}: {style.markup(t(r.remediation_key))}")
         elif r.status in (Status.SKIPPED, Status.ERROR):
-            lines.append(f"    {t(r.description_key)}")
+            lines.append(f"    {style.markup(t(r.description_key))}")
     lines.append("")
-    lines.append(t("summary.completed"))
+    lines.append(style.bold(t("summary.completed")))
     lines.append("")
     lines.append(t("summary.findings"))
     counts = report.count_by_severity()
     for sev in sorted(Severity, reverse=True):
-        lines.append(f"{sev.name + ':':<10}{counts[sev]}")
+        label = f"{sev.name + ':':<10}"
+        shown = style.paint(label, *ui.SEVERITY_STYLE[sev.name]) if counts[sev] else label
+        lines.append(f"{shown}{counts[sev]}")
     for status, key in ((Status.SKIPPED, "summary.skipped"), (Status.ERROR, "summary.errors")):
         count = report.count_status(status)
         if count:
@@ -63,7 +67,7 @@ def render_text(t: Translator, ctx: AuditContext, report: AuditReport, lang: str
     if not ctx.os_info.is_supported:
         lines.append(t("summary.unsupported_os"))
     if report.count_status(Status.FAIL):
-        lines.append(t("summary.hint_fix"))
+        lines.append(style.markup(t("summary.hint_fix")))
     return "\n".join(lines).rstrip() + "\n"
 
 
