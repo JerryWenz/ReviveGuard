@@ -27,6 +27,7 @@ DYNAMIC = {
     "fail2ban": ["running", "config_valid", "ssh_jail", "log_backend", "ban_settings"],
     "updates": ["index_fresh", "security_updates", "reboot", "auto_updates", "os_supported"],
     "services": ["public", "risky"],
+    "accounts": ["admin_user", "empty_password", "extra_root"],
     "permissions": [name for name, _, _ in permissions.GROUPS.values()],
     "sysctl": [p.name for p in sysctl.PARAMS],
 }

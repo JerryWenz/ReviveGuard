@@ -13,6 +13,7 @@ from reviveguard.backup import Store
 from reviveguard.config import Config
 from reviveguard.context import AuditContext
 from reviveguard.fixes import REGISTRY as FIXERS
+from reviveguard.fixes.access import admin_result, plan_admin_user, validate_username
 from reviveguard.i18n import Translator
 from reviveguard.models import CheckResult, Severity, Status
 from reviveguard.remediation import FixSpec, Manual, preflight, run_fix
@@ -34,11 +35,12 @@ class Console:
     def say(self, text: str = "", err: bool = False) -> None:
         print(self.style.markup(text), file=sys.stderr if err else sys.stdout)
 
-    def ask(self, prompt: str, default: str = "") -> str:
+    def ask(self, prompt: str, default: str = "", lower: bool = True) -> str:
         try:
-            answer = input(self.style.markup(prompt)).strip().lower()
+            answer = input(self.style.markup(prompt)).strip()
         except EOFError:
-            return "q"  # no terminal: never assume consent
+            return "q" if lower else ""  # no terminal: never assume consent
+        answer = answer.lower() if lower else answer
         return answer or default
 
 
@@ -299,7 +301,15 @@ def cmd_wizard(
         con.say(f"  {t('wizard.safe_none')}")
 
     con.say(f"\n{style.step(3, total, t('wizard.step.access'))}")
-    if needs_decision and code == 0:
+    created_admin = False
+    if any(i.result.check_id == "USR-001" for i in manual) and code == 0:
+        con.say(f"  {t('wizard.admin_offer')}")
+        if con.ask(t("wizard.admin_confirm"), "y") in ("y", "yes"):
+            created_admin = admin_flow(con, store, ctx, config) == 0
+            manual = [i for i in manual if i.result.check_id != "USR-001"]
+    if created_admin:
+        con.say(f"  {t('wizard.admin_created')}")
+    elif needs_decision and code == 0:
         con.say(f"  {t('wizard.access_intro')}")
         counts, code = interactive(con, store, ctx, needs_decision)
     elif not needs_decision:
@@ -325,3 +335,66 @@ def cmd_wizard(
         con.say(f"  {t('wizard.report_failed')}", err=True)
     con.say(f"\n{t('wizard.done')}")
     return code
+
+
+def admin_flow(
+    con: Console,
+    store: Store,
+    ctx: AuditContext,
+    config: Config,
+    name: str | None = None,
+    key_line: str | None = None,
+    nopasswd: bool = True,
+    assume_yes: bool = False,
+) -> int:
+    """Create a key-only sudo administrator (asks for what is missing)."""
+    t = con.t
+    blocked = _guard(con, ctx, config)
+    if blocked is not None:
+        return blocked
+    con.say(f"\n{con.style.bold(t('admin.title'))}")
+    con.say(f"  {t('admin.intro')}")
+    if name is None:
+        name = con.ask(t("admin.ask_name"), "admin", lower=False)
+    problem = validate_username(name)
+    if problem:
+        con.say(t(problem), err=True)
+        return 1
+    if key_line is None:
+        con.say(f"  {t('admin.key_help')}")
+        key_line = con.ask(t("admin.ask_key"), "", lower=False)
+    plan = plan_admin_user(ctx, name, key_line, nopasswd)
+    if isinstance(plan, Manual):
+        con.say(t(plan.reason_key, **plan.args), err=True)
+        return 1
+    item = Item(admin_result(), plan)
+    describe(con, ctx, item.result, plan)
+    if not assume_yes and con.ask(t("fix.prompt"), "y") not in ("y", "yes"):
+        con.say(t("fix.skipped"))
+        return 1
+    return 0 if apply_item(con, store, ctx, item) else 1
+
+
+def cmd_admin_user(
+    t: Translator, style: ui.Style, store: Store, ctx: AuditContext, config: Config, args
+) -> int:
+    key_line = None
+    if args.key_file:
+        try:
+            lines = args.key_file.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            Console(t, style).say(
+                t("admin.err.key_file", detail=exc.strerror or str(exc)), err=True
+            )
+            return 1
+        key_line = next((x for x in lines if x.strip() and not x.startswith("#")), "")
+    return admin_flow(
+        Console(t, style),
+        store,
+        ctx,
+        config,
+        args.name,
+        key_line,
+        nopasswd=not args.require_sudo_password,
+        assume_yes=args.yes,
+    )
