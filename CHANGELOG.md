@@ -15,5 +15,12 @@ interfaces between minor releases.
 - TOML configuration with strict validation.
 - `reviveguard audit [--format text|json]`.
 
+- Backup store and operation history (`/var/lib/reviveguard`), checksummed backups preserving
+  mode and ownership, atomic history records written before any change.
+- `reviveguard history` and `reviveguard rollback [--id ID] [--yes]` with plan preview,
+  backup validation, confirmation and post-restore verification.
+- Verification helpers (re-run a check, verify restored files).
+
 ### Not implemented yet
-Remediation (`fix`), backup/rollback, reports, and all other check modules.
+Remediation (`fix`) itself, reports, and all check modules except SSH. Backup and rollback are
+in place but nothing creates operations yet, so `history` is empty on a fresh system.
