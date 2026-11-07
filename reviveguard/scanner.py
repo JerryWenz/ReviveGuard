@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from reviveguard.checks import REGISTRY
 from reviveguard.config import Config
@@ -14,7 +14,9 @@ from reviveguard.models import CheckResult, Severity, Status
 @dataclass
 class AuditReport:
     results: list[CheckResult]
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+    )
     modules: list[str] = field(default_factory=list)
 
     def count_by_severity(self) -> dict[Severity, int]:

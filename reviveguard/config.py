@@ -6,11 +6,16 @@ rejected instead of being silently ignored.
 
 from __future__ import annotations
 
-import tomllib
+import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from reviveguard.i18n import available_languages
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # Python 3.10 (Ubuntu 22.04 system Python)
+    import tomli as tomllib
 
 DEFAULT_CONFIG_PATH = Path("/etc/reviveguard/config.toml")
 REPORT_FORMATS = ("markdown", "json")
