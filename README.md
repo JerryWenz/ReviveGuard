@@ -103,6 +103,18 @@ Language priority: `--lang`, config `language`, locale (`LANG`), English.
 
 ## SSH remediation safety
 
+Three independent layers protect against lockout when access is narrowed (root login, passwords,
+algorithms, port):
+
+1. **Proof from the SSH log** that *your current session* logged in with a public key. A key in
+   `authorized_keys` proves nothing about what you hold; password or unknown logins are refused.
+2. **Commit-confirm:** after applying, you must log in from a NEW terminal and type `ok` within 180 s,
+   otherwise ReviveGuard restores the files and reloads SSH by itself (no terminal = reverted).
+3. **Validation and rollback:** `sshd -t` before reload, automatic restore on any failure, and
+   `reviveguard rollback` reloads the service after restoring.
+
+Still keep a provider console (VNC/rescue) at hand on a first run.
+
 - Fixes add a small drop-in (`/etc/ssh/sshd_config.d/00-reviveguard-<option>.conf`) instead of
   rewriting `sshd_config`. Undo = `reviveguard rollback` (or delete the file).
 - Order: pre-checks (current config must pass `sshd -t`, `Include` present, root, supported OS) →

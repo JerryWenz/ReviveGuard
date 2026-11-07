@@ -110,6 +110,9 @@ def _dropin_spec(
         service_key="fix.service.reload_ssh" if service else None,
         disruptive=disruptive,
         reload_service="ssh" if service else None,
+        # Commit-confirm: a change that can narrow access stays only if the administrator
+        # proves, from a NEW session, that they can still get in.
+        confirm_key="fix.confirm.ssh" if disruptive and service else None,
     )
 
 
@@ -363,6 +366,8 @@ def _port_spec(
         service_key="fix.service.reload_ssh",
         disruptive=True,
         reload_service="ssh",
+        confirm_key="fix.confirm.ssh_port",
+        confirm_args={"port": must_listen},
         verify=verify,
         next_key=next_key,
         next_args={"port": must_listen, "old": must_not_listen or "22"},

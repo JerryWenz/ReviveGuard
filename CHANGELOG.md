@@ -71,6 +71,10 @@ interfaces between minor releases.
   password. Unknown or password logins are refused (manual).
 - The wizard no longer continues to the access-narrowing steps after the administrator account failed.
 
+- Every SSH change that can narrow access (root login, passwords, algorithms, port) now uses commit-confirm:
+  the change stays only if you type `ok` after logging in from a NEW terminal within 180 s; otherwise the files
+  are restored and SSH is reloaded automatically (no terminal = reverted).
+
 ### Changed
 - `reviveguard rollback` reloads the service the operation touched (ssh/fail2ban, after validating sshd) so restored files
   take effect.

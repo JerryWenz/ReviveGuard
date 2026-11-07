@@ -165,7 +165,20 @@ def test_cli_waits_for_confirmation_and_reverts_without_it(
 def test_read_confirmation_without_a_terminal_is_a_no(monkeypatch):
     import io
 
-    from reviveguard import fixflow
+    from .conftest import REAL_READ_CONFIRMATION
 
     monkeypatch.setattr("sys.stdin", io.StringIO(""))  # EOF / no input
-    assert fixflow.read_confirmation(0) is False
+    assert REAL_READ_CONFIRMATION(0) is False
+    import os
+
+    read_fd, write_fd = os.pipe()  # a real file descriptor, as select() needs
+    os.write(write_fd, b"ok\n")
+    with os.fdopen(read_fd) as pipe:
+        monkeypatch.setattr("sys.stdin", pipe)
+        assert REAL_READ_CONFIRMATION(1) is True
+    os.close(write_fd)
+    empty_r, empty_w = os.pipe()  # nothing typed within the timeout -> no confirmation
+    with os.fdopen(empty_r) as pipe:
+        monkeypatch.setattr("sys.stdin", pipe)
+        assert REAL_READ_CONFIRMATION(0) is False
+    os.close(empty_w)
