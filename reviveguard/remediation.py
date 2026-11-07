@@ -47,6 +47,7 @@ class FixSpec:
     change_args: dict[str, str] = field(default_factory=dict)
     service_key: str | None = None
     disruptive: bool = False
+    packages: list[str] = field(default_factory=list)  # packages it may install (never undone)
     reversible: bool = True  # False: e.g. package installs; recorded, rollback refuses
     verify: Callable[[], str | None] | None = None  # None: re-run the owning check
 

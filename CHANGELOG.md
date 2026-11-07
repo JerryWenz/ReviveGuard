@@ -47,6 +47,10 @@ interfaces between minor releases.
   (e.g. `config set language ru`); `install.sh` asks for the language (`--lang en|ru`).
 
 ### Changed
+- Fail2ban setup now works on bare images (found on a real Ubuntu 22.04 server): journald backend
+  (`python3-systemd`) when there is no `/var/log/auth.log`, `iptables` + matching `banaction` when no
+  firewall tool exists, and an installed-but-stopped fail2ban is started. The CLI states that
+  installed packages stay after a reverted fix.
 - `install.sh` re-runs now really update an existing install (`--force-reinstall --no-cache-dir`);
   pip kept the old code when the version number was unchanged. Version bumped to 0.1.0.dev1.
 - `install.sh` no longer lets needrestart restart services (list-only mode).

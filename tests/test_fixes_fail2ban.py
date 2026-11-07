@@ -37,7 +37,10 @@ class Fail2banHost:
             return res(rc=0 if self.config_ok else 255, err="" if self.config_ok else "bad config")
         if args == ["fail2ban-client", "--version"]:
             return res("1.0")
-        if args == ["systemctl", "is-active", "fail2ban"]:
+        if args in (
+            ["systemctl", "is-active", "fail2ban"],
+            ["systemctl", "is-active", "--quiet", "fail2ban"],
+        ):
             return res("active")
         if args == ["fail2ban-client", "reload"]:
             self.reloaded = self.reload_ok
@@ -73,6 +76,7 @@ def test_enable_ssh_jail_end_to_end(make_ctx, fake_root, tmp_path):
     assert outcome.status == "applied"
     dropin = fake_root / "etc/fail2ban/jail.d/reviveguard-sshd.local"
     assert "[sshd]\nenabled = true\nport = 22" in dropin.read_text()
+    assert "backend" not in dropin.read_text()  # auth.log/journal layout unknown in this fake
     assert ["fail2ban-client", "reload"] in host.calls
     assert not any(c[:2] == ["systemctl", "restart"] for c in host.calls)
     assert verify_check_passes(ctx, "F2B-002").ok

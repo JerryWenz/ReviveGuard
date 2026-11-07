@@ -163,7 +163,7 @@
   "fix.updates.security": "обновить {count} пакет(ов) только из репозитория безопасности: {packages}",
   "fix.updates.auto": "установить unattended-upgrades и записать {path}",
   "fix.firewall.install_ufw": "установить пакет ufw (он останется выключенным; правила файрвола не меняются)",
-  "fix.fail2ban.install": "установить fail2ban и добавить ваш текущий SSH-адрес в исключения ({ip})",
+  "fix.fail2ban.install": "настроить fail2ban (пакеты: {packages}), включить jail sshd с существующим на этом хосте источником логов и механизмом блокировки, добавить ваш SSH-адрес в исключения ({ip})",
   "fix.service.packages_may_restart": "Обновления могут перезапускать службы (например, ssh); текущие сессии обычно сохраняются. Потом может понадобиться перезагрузка.",
   "fix.not_reversible_note": "Изменения пакетов нельзя отменить командой 'reviveguard rollback'; операция только записывается в историю.",
   "fix.result.not_reversible": "Изменения пакетов автоматически не откатываются ({id}). При необходимости проверьте состояние: 'dpkg --audit' и 'apt-get -f install'.",
@@ -235,5 +235,7 @@
   "config.unknown_key": "Неизвестная настройка: {key}",
   "config.bad_value": "Недопустимое значение для {key}: {detail}",
   "error.config_write": "Не удалось записать конфигурацию ({detail}). Запустите от root или укажите --config.",
-  "config.usage": "Использование: reviveguard config set <ключ> <значение> | reviveguard config show"
+  "config.usage": "Использование: reviveguard config set <ключ> <значение> | reviveguard config show",
+  "fix.service.start_fail2ban": "Fail2ban будет запущен или перезагружен (reload, не restart). Повторные неудачные входы с вашего адреса могут привести к его бану.",
+  "fix.result.packages_remain": "Внимание: установленные пакеты остаются в системе и не удаляются: {packages}."
 }
