@@ -17,7 +17,7 @@
 # install from instead), REVIVEGUARD_PREFIX (default /opt/reviveguard), REVIVEGUARD_BIN_DIR.
 set -euo pipefail
 
-REF="${REVIVEGUARD_REF:-claude/quirky-franklin-vnj8hz}" # switch to a release tag/main once merged
+REF="${REVIVEGUARD_REF:-main}" # pin a release tag via REVIVEGUARD_REF for reproducible installs
 REPO="JerryWenz/ReviveGuard"
 PREFIX="${REVIVEGUARD_PREFIX:-/opt/reviveguard}"
 BIN_DIR="${REVIVEGUARD_BIN_DIR:-/usr/local/bin}"

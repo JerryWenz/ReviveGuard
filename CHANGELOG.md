@@ -6,6 +6,9 @@ interfaces between minor releases.
 
 ## [Unreleased]
 
+The first merge into `main`. Still a pre-release (0.1.0.dev1): early development, not security-reviewed.
+`install.sh` and the README now point at `main`.
+
 ### Added
 - Project foundation: package layout, `pyproject.toml`, CI (ruff + pytest).
 - Read-only audit engine with a common `CheckResult` model and per-check error isolation.

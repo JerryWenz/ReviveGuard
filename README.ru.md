@@ -68,7 +68,7 @@ CRITICAL/HIGH, пока политика в конфиге (`allow_critical`, `a
 Сначала прочитайте скрипт:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/claude/quirky-franklin-vnj8hz/install.sh
+curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/main/install.sh
 less install.sh      # листайте пробелом, выход — клавиша q
 sudo bash install.sh
 ```
