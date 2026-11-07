@@ -19,6 +19,7 @@ INSTALLABLE = frozenset(
         "python3-systemd",
         "iptables",
         "libpam-pwquality",
+        "systemd-timesyncd",
     }
 )
 PKG_NAME = re.compile(r"^[a-z0-9][a-z0-9+.\-]*$")

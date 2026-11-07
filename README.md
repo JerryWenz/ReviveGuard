@@ -24,7 +24,7 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 ## What works today
 
 - Modules: SSH, firewall, fail2ban, system updates, file permissions, kernel (sysctl), services/ports,
-  accounts, Docker.
+  accounts, Docker, time synchronization and time zone.
 - Professional hardening, step by step: a dedicated key-only administrator (`admin-user`), then switch off
   root login and passwords, move SSH to another port in two safe phases (the old port stays until you log in
   through the new one), fail2ban on the right ports, ufw with default deny and a live-confirmation safety net.

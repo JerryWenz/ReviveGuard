@@ -397,5 +397,19 @@
   "admin.ask_password": "Set a password for '{name}' now? [Y/n] ",
   "admin.password_later": "Without a key and a password nobody can log in as '{name}'. Set a password later with 'passwd {name}' or add a key with 'reviveguard add-key --name {name}'.",
   "admin.password_next": "open a NEW terminal and log in as {name} with this password; 'sudo -v' asks for it. Then run 'sudo reviveguard wizard': it will offer to switch off root login (your login by password stays).",
-  "admin.password_failed": "The password for '{name}' was not set. Try again with 'passwd {name}'."
+  "admin.password_failed": "The password for '{name}' was not set. Try again with 'passwd {name}'.",
+  "time.module.title": "Time and time zone",
+  "time.unavailable": "'timedatectl' is not available; time checks are skipped.",
+  "time.container": "Running in a container: the clock and time zone belong to the host, so time checks are skipped.",
+  "time.ntp_sync.title": "Clock synchronization",
+  "time.ntp_sync.desc": "A clock that is not synchronized breaks log correlation, TLS certificate checks and one-time codes (2FA).",
+  "time.ntp_sync.fix": "Enable time synchronization: 'timedatectl set-ntp true' (ReviveGuard can do this; it installs systemd-timesyncd if needed).",
+  "time.timezone.title": "Server time zone",
+  "time.timezone.desc": "Servers are easiest to operate and to compare logs across in UTC; a local zone is not a vulnerability, only a recommendation.",
+  "time.timezone.fix": "Switch with 'timedatectl set-timezone UTC' if you want UTC. Check cron jobs and applications that assume the local zone first (ReviveGuard never changes it).",
+  "fix.time.enable_ntp": "enable time synchronization with 'timedatectl set-ntp true' (installs systemd-timesyncd first when no time service exists)",
+  "fix.next.ntp": "the first synchronization can take a minute; check 'timedatectl status'. If it never synchronizes, UDP port 123 may be blocked by a firewall.",
+  "fix.reason.ntp_waiting": "synchronization is already enabled but the clock is not synchronized yet. Wait a minute and re-check; if it stays unsynchronized, check the network and that UDP 123 is not blocked.",
+  "fix.reason.no_timedatectl": "'timedatectl' is not available.",
+  "fix.reason.timezone_manual": "ReviveGuard never changes the time zone (cron jobs and applications may depend on it); follow the recommendation if you want UTC."
 }
