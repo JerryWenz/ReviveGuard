@@ -108,7 +108,10 @@ def _revert(store: Store, spec: FixSpec, op: Operation, activated: bool) -> bool
         except Exception:
             return False
     if activated and spec.activate is not None:
-        spec.activate()  # best effort: make the running service match the restored files
+        try:
+            spec.activate()  # best effort: make the running service match the restored files
+        except Exception:
+            pass  # the files are already restored; a failing reload must not undo that
     return True
 
 
@@ -139,33 +142,48 @@ def run_fix(
         ok = _revert(store, spec, op, activated)
         return Outcome(status, op.op_id, detail, reverted=True, revert_ok=ok)
 
+    phase = "apply"
     try:
         spec.apply()
-    except BaseException as exc:  # includes KeyboardInterrupt: restore before re-raising
-        mark_failed(store, op, f"apply_failed: {type(exc).__name__}")
-        ok = _revert(store, spec, op, False) if spec.reversible else True
+        phase = "validation"
+        error = spec.validate()
+        if error:
+            return fail("validation_failed", error)
+        phase = "activation"
+        if spec.activate is not None:
+            if not spec.activate():
+                return fail(
+                    "activation_failed", "service did not accept the new configuration", True
+                )
+        phase = "verify"
+        if spec.verify is not None:
+            problem = spec.verify()
+            if problem:
+                return fail("verify_failed", problem, activated=spec.activate is not None)
+        else:
+            verification = verify_check_passes(ctx, spec.check_id)
+            if not verification.ok:
+                return fail(
+                    "verify_failed", verification.detail, activated=spec.activate is not None
+                )
+        phase = "confirmation"
+        if spec.confirm_key and not (confirm and confirm(spec)):
+            return fail("confirmation_failed", "no confirmation received", activated=True)
+        mark_applied(store, op)
+        return Outcome("applied", op.op_id)
+    except BaseException as exc:
+        # Any error or interruption (Ctrl+C, or SIGHUP/SIGTERM when the SSH session drops) in ANY
+        # phase restores the original files before the exception moves on.
+        try:
+            already = store.load(op.op_id).status == "rolled_back"
+        except BackupError:
+            already = False
+        ok = True
+        if not already:
+            mark_failed(store, op, f"{phase}_failed: {type(exc).__name__}")
+            if spec.reversible:
+                ok = _revert(store, spec, op, phase in ("activation", "verify", "confirmation"))
         if not isinstance(exc, Exception):
             raise
-        return Outcome("apply_failed", op.op_id, str(exc), spec.reversible, ok)
-    error = spec.validate()
-    if error:
-        return fail("validation_failed", error)
-    if spec.activate is not None:
-        try:
-            activated_ok = spec.activate()
-        except Exception as exc:
-            return fail("activation_failed", str(exc), activated=True)
-        if not activated_ok:
-            return fail("activation_failed", "service did not accept the new configuration", True)
-    if spec.verify is not None:
-        problem = spec.verify()
-        if problem:
-            return fail("verify_failed", problem, activated=spec.activate is not None)
-    else:
-        verification = verify_check_passes(ctx, spec.check_id)
-        if not verification.ok:
-            return fail("verify_failed", verification.detail, activated=spec.activate is not None)
-    if spec.confirm_key and not (confirm and confirm(spec)):
-        return fail("confirmation_failed", "no confirmation received", activated=True)
-    mark_applied(store, op)
-    return Outcome("applied", op.op_id)
+        detail = f"{type(exc).__name__}: {exc}"[:200]
+        return Outcome(f"{phase}_failed", op.op_id, detail, spec.reversible, ok)
