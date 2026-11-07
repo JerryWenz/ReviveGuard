@@ -15,7 +15,16 @@ def test_broken_check_is_isolated(make_ctx, monkeypatch):
         raise RuntimeError("secret detail must not leak into the message")
 
     monkeypatch.setitem(checks.REGISTRY, "ssh", boom)
-    only_ssh = Config(audit=AuditConfig(firewall=False, fail2ban=False, updates=False))
+    only_ssh = Config(
+        audit=AuditConfig(
+            firewall=False,
+            fail2ban=False,
+            updates=False,
+            permissions=False,
+            services=False,
+            sysctl=False,
+        )
+    )
     report = run_audit(make_ctx(), only_ssh)
     assert len(report.results) == 1
     assert report.results[0].status is Status.ERROR

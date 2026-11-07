@@ -34,9 +34,18 @@ interfaces between minor releases.
   ban settings. Automatic fix for `F2B-002` (drop-in enabling the sshd jail, `reload` not restart).
 - Guide for testing on a real server (`docs/vps-testing.ru.md`).
 
+- Update checks `UPD-001`..`UPD-005` and apt-based fixes (index refresh, security-only upgrades,
+  unattended-upgrades, install ufw/fail2ban). Package operations are non-reversible and recorded.
+- Permission checks `PERM-001`..`PERM-004` with a fix that only removes permission bits.
+- Sysctl checks `SYS-001`..`SYS-008`; safe values applied via `/etc/sysctl.d/99-reviveguard.conf`;
+  skipped in containers; forwarding judged in context (Docker/VPN).
+- Services/ports checks `SVC-001`, `SVC-002` (findings only; services are never stopped).
+- `install.sh`: one-command installer (confirmation, only missing prerequisites, own virtualenv).
+- Python 3.10 support (Ubuntu 22.04 system Python).
+
 ### Changed
 - sshd configuration values keep their original case (user names and paths are case-sensitive).
 
 ### Not implemented yet
-`fix --auto`, reports, and the Docker, updates, permissions, services and sysctl modules.
+`fix --auto`, reports, the Docker module, and enabling a firewall (manual by design).
 Fixes (SSH, fail2ban) have not been exercised against real services yet (see README).

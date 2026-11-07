@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from reviveguard.checks import fail2ban, firewall, ssh, updates
+from reviveguard.checks import (
+    fail2ban,
+    firewall,
+    permissions,
+    services,
+    ssh,
+    sysctl,
+    updates,
+)
 from reviveguard.context import AuditContext
 from reviveguard.models import CheckResult
 
@@ -15,7 +23,18 @@ REGISTRY: dict[str, CheckFunc] = {
     "firewall": firewall.run,
     "fail2ban": fail2ban.run,
     "updates": updates.run,
+    "permissions": permissions.run,
+    "services": services.run,
+    "sysctl": sysctl.run,
 }
 
 # Check ID prefix -> category (used to find the module that owns a check ID).
-PREFIXES = {"SSH": "ssh", "FW": "firewall", "F2B": "fail2ban", "UPD": "updates"}
+PREFIXES = {
+    "SSH": "ssh",
+    "FW": "firewall",
+    "F2B": "fail2ban",
+    "UPD": "updates",
+    "PERM": "permissions",
+    "SVC": "services",
+    "SYS": "sysctl",
+}

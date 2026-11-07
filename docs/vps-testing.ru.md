@@ -5,8 +5,8 @@
 
 ## 0. Подготовка (обязательно)
 
-1. Одноразовый VPS: **Debian 12** или **Ubuntu 24.04** (на Ubuntu 22.04 системный Python — 3.10,
-   а нужен 3.11+; используйте Debian 12 / Ubuntu 24.04 или поставьте Python 3.11 отдельно).
+1. Одноразовый VPS: **Debian 12**, **Ubuntu 22.04** или **Ubuntu 24.04** (на Ubuntu 22.04 системный Python — 3.10,
+   подходит — ReviveGuard поддерживает Python 3.10+).
 2. Сделайте **снапшот** VPS в панели провайдера.
 3. Убедитесь, что есть **консоль провайдера** (VNC / Rescue) — это ваш выход, если потеряете SSH.
 4. Откройте **две** SSH-сессии. Вторую не закрывайте до конца тестов.
@@ -17,46 +17,29 @@ sudo adduser --disabled-password --gecos "" rgtest
 sudo usermod -aG sudo rgtest
 ```
 
-## 1. Установка
+## 1. Установка (одной командой)
+
+Скрипт сам предупредит, что установит, и спросит подтверждение. Сначала прочитайте его:
 
 ```bash
-sudo apt update && sudo apt install -y git python3-venv
-git clone https://github.com/JerryWenz/ReviveGuard.git
-cd ReviveGuard
-git checkout claude/quirky-franklin-vnj8hz
-python3 -m venv ~/rg-venv
-~/rg-venv/bin/pip install -e .
-~/rg-venv/bin/python -m pytest --version >/dev/null 2>&1 || ~/rg-venv/bin/pip install pytest
-~/rg-venv/bin/python -m pytest -q          # тесты на самом сервере
+apt-get update && apt-get install -y curl      # только если curl нет
+curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/claude/quirky-franklin-vnj8hz/install.sh
+less install.sh
+bash install.sh
 ```
 
-### Ubuntu 22.04: сначала поставьте Python 3.11
+Он ставит недостающие `python3`, `python3-venv`, `ca-certificates`, создаёт `/opt/reviveguard/venv`,
+делает команду `reviveguard` и запускает аудит (только чтение). Python 3.10 (Ubuntu 22.04) подходит.
+Тесты репозитория на сервере запускать не обязательно.
 
-Системный Python здесь 3.10, а ReviveGuard требует 3.11+. Самый простой путь — PPA deadsnakes:
-
-```bash
-sudo apt update && sudo apt install -y software-properties-common git
-sudo add-apt-repository -y ppa:deadsnakes/ppa
-sudo apt install -y python3.11 python3.11-venv
-python3.11 --version      # должно быть 3.11.x
-```
-
-В командах установки выше замените `python3 -m venv ~/rg-venv` на
-`python3.11 -m venv ~/rg-venv`. Остальное без изменений. На 22.04 стоит fail2ban 0.11 (источник
-логов `auto`, файл `/var/log/auth.log`) — это нормально, проверки это учитывают.
-
-Дальше везде `RG="sudo $HOME/rg-venv/bin/reviveguard"`:
-
-```bash
-RG="sudo $HOME/rg-venv/bin/reviveguard"
-```
+Дальше команды вида `reviveguard ...` (от root, либо через `sudo`).
 
 ## 2. Аудит (только чтение)
 
 ```bash
-~/rg-venv/bin/reviveguard --lang ru audit            # без root: должно быть предупреждение
-$RG --lang ru audit                                    # с root
-$RG audit --format json > ~/audit.json
+reviveguard --lang ru audit            # без root: должно быть предупреждение
+reviveguard --lang ru audit                                    # с root
+reviveguard audit --format json > ~/audit.json
 sudo sshd -T | grep -Ei 'permitrootlogin|passwordauthentication|pubkeyauthentication|authenticationmethods'
 ```
 
@@ -70,7 +53,7 @@ sudo sshd -T | grep -Ei 'permitrootlogin|passwordauthentication|pubkeyauthentica
 под ним по паролю:
 
 ```bash
-$RG --lang ru fix --check SSH-002
+reviveguard --lang ru fix --check SSH-002
 ```
 
 Ожидание: «Требуется ручное исправление…», **файлы не изменены**
@@ -80,7 +63,7 @@ $RG --lang ru fix --check SSH-002
 из **нового** окна, затем:
 
 ```bash
-$RG fix --check SSH-002        # ответьте y, затем yes
+reviveguard fix --check SSH-002        # ответьте y, затем yes
 sudo sshd -T | grep passwordauthentication       # ожидание: no
 cat /etc/ssh/sshd_config.d/00-reviveguard-passwordauthentication.conf
 ```
@@ -90,8 +73,8 @@ cat /etc/ssh/sshd_config.d/00-reviveguard-passwordauthentication.conf
 **C. Откат.**
 
 ```bash
-$RG history
-$RG rollback                  # посмотрите план, подтвердите y
+reviveguard history
+reviveguard rollback                  # посмотрите план, подтвердите y
 sudo systemctl reload ssh     # rollback сам службу не перезагружает
 sudo sshd -T | grep passwordauthentication       # ожидание: снова yes
 ```
@@ -105,16 +88,33 @@ sudo sshd -T | grep passwordauthentication       # ожидание: снова 
 некорректна». Удалите файл.
 
 **F. Файрвол (только аудит).** `ufw` установлен, но выключен (`sudo ufw status`):
-`$RG --lang ru audit` → ожидается находка `FW-001`. Затем **разрешите SSH-порт** и включите ufw
+`reviveguard --lang ru audit` → ожидается находка `FW-001`. Затем **разрешите SSH-порт** и включите ufw
 вручную (`sudo ufw allow 22/tcp && sudo ufw enable`; порт — ваш), повторите аудит: `FW-001..004` OK.
 Откройте порт БД (`sudo ufw allow 3306/tcp`) → ожидается `FW-003`; удалите правило. Попробуйте
-`$RG fix --category firewall`: ожидается «вручную», правила не меняются (`sudo ufw status` до/после).
+`reviveguard fix --category firewall`: ожидается «вручную», правила не меняются (`sudo ufw status` до/после).
 
-**G. Fail2ban.** `sudo apt install -y fail2ban`; `$RG audit` (без root — пропуск). Чтобы вызвать
+**G. Fail2ban.** `sudo apt install -y fail2ban`; `reviveguard audit` (без root — пропуск). Чтобы вызвать
 `F2B-002`, временно отключите jail: файл `/etc/fail2ban/jail.d/defaults-debian.conf` →
-`enabled = false` для `[sshd]`, `sudo fail2ban-client reload`. Затем `$RG fix --check F2B-002`
+`enabled = false` для `[sshd]`, `sudo fail2ban-client reload`. Затем `reviveguard fix --check F2B-002`
 (y), проверьте `sudo fail2ban-client status`, `sudo fail2ban-client status sshd`, откат
-(`$RG rollback`) и `sudo fail2ban-client reload`. Верните `enabled` в исходное состояние.
+(`reviveguard rollback`) и `sudo fail2ban-client reload`. Верните `enabled` в исходное состояние.
+
+**H. «Голый» сервер: обновления и недостающие пакеты.** По одному, после каждого шага смотрите
+`reviveguard history` и повторяйте `reviveguard audit` (исправления открывают новые находки):
+
+```bash
+reviveguard fix --category updates      # UPD-001: обновить индекс apt (y)
+reviveguard audit                       # теперь виден UPD-002/UPD-004
+reviveguard fix --category updates      # UPD-002: только обновления безопасности (y, затем yes); UPD-004: автообновления
+reviveguard fix --category fail2ban     # F2B-001: установка fail2ban, ваш IP попадёт в исключения
+reviveguard fix --category firewall     # FW-001: установка ufw (остаётся ВЫКЛЮЧЕННЫМ)
+reviveguard fix --category permissions  # права на файлы (если есть находки)
+reviveguard fix --category sysctl       # безопасные параметры ядра (в контейнере будет пропуск)
+```
+
+Ожидание: пакетные операции в `history` помечены «не обратимо»; `rollback` для них отказывает;
+после обновлений ядра `UPD-003` просит перезагрузку (сам ReviveGuard не перезагружает). Включение
+ufw — только вручную: сначала `ufw allow 22/tcp`, потом `ufw enable`, из второй сессии.
 
 ## 4. Что прислать мне (без секретов)
 
