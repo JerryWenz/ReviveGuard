@@ -47,6 +47,9 @@ class FixSpec:
     change_args: dict[str, str] = field(default_factory=dict)
     service_key: str | None = None
     disruptive: bool = False
+    undo: Callable[[], None] | None = None  # undo runtime state after files were restored
+    confirm_key: str | None = None  # needs the user's live confirmation (i18n key), else revert
+    confirm_args: dict[str, str] = field(default_factory=dict)
     next_key: str | None = None  # shown after a successful apply: what to do next
     next_args: dict[str, str] = field(default_factory=dict)
     packages: list[str] = field(default_factory=list)  # packages it may install (never undone)
@@ -98,12 +101,22 @@ def _revert(store: Store, spec: FixSpec, op: Operation, activated: bool) -> bool
         return False
     if failed:
         return False
+    if spec.undo is not None:
+        try:
+            spec.undo()  # runtime state that restoring files cannot undo (e.g. a loaded firewall)
+        except Exception:
+            return False
     if activated and spec.activate is not None:
         spec.activate()  # best effort: make the running service match the restored files
     return True
 
 
-def run_fix(store: Store, ctx: AuditContext, spec: FixSpec) -> Outcome:
+def run_fix(
+    store: Store,
+    ctx: AuditContext,
+    spec: FixSpec,
+    confirm: Callable[[FixSpec], bool] | None = None,
+) -> Outcome:
     """Execute one fix. Never leaves a half-applied change if it can be avoided."""
     try:
         op = begin_operation(
@@ -145,5 +158,7 @@ def run_fix(store: Store, ctx: AuditContext, spec: FixSpec) -> Outcome:
         verification = verify_check_passes(ctx, spec.check_id)
         if not verification.ok:
             return fail("verify_failed", verification.detail, activated=spec.activate is not None)
+    if spec.confirm_key and not (confirm and confirm(spec)):
+        return fail("confirmation_failed", "no confirmation received", activated=True)
     mark_applied(store, op)
     return Outcome("applied", op.op_id)

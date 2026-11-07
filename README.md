@@ -23,8 +23,11 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 
 ## What works today
 
-- Modules: SSH, firewall, fail2ban, system updates, file permissions, kernel (sysctl), services/ports.
-  Docker checks are not implemented yet.
+- Modules: SSH, firewall, fail2ban, system updates, file permissions, kernel (sysctl), services/ports,
+  accounts, Docker.
+- Professional hardening, step by step: a dedicated key-only administrator (`admin-user`), then switch off
+  root login and passwords, move SSH to another port in two safe phases (the old port stays until you log in
+  through the new one), fail2ban on the right ports, ufw with default deny and a live-confirmation safety net.
 - On a bare server `reviveguard fix` can, **after asking you each time**: refresh the apt index,
   apply *security-only* updates, enable automatic security updates, install `ufw` (left disabled),
   install `fail2ban` (your current SSH client address is whitelisted), tighten file permissions,
@@ -46,7 +49,7 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 
 ## Not implemented yet
 
-`fix --auto`, `report`, `config set`, and the Docker checks. Enabling a firewall is always manual. See the roadmap below.
+`config set` for individual rules beyond the supported keys, 2FA for SSH, auditd and password policy. See the roadmap below.
 
 ## Requirements and tested platforms
 

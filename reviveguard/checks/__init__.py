@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from reviveguard.checks import (
     accounts,
+    docker,
     fail2ban,
     firewall,
     permissions,
@@ -28,6 +29,7 @@ REGISTRY: dict[str, CheckFunc] = {
     "services": services.run,
     "sysctl": sysctl.run,
     "accounts": accounts.run,
+    "docker": docker.run,
 }
 
 # Check ID prefix -> category (used to find the module that owns a check ID).
@@ -40,4 +42,5 @@ PREFIXES = {
     "SVC": "services",
     "SYS": "sysctl",
     "USR": "accounts",
+    "DOC": "docker",
 }
