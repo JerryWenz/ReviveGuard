@@ -26,6 +26,7 @@ from reviveguard.ssh_access import (
     current_login_user,
     is_remote_session,
     read_passwd,
+    session_auth_method,
 )
 
 DROPIN_DIR = "/etc/ssh/sshd_config.d"
@@ -108,7 +109,24 @@ def _dropin_spec(
         change_args={"path": f"{DROPIN_DIR}/{name}", "directive": shown},
         service_key="fix.service.reload_ssh" if service else None,
         disruptive=disruptive,
+        reload_service="ssh" if service else None,
     )
+
+
+def _needs_proof(ctx: AuditContext) -> Manual | None:
+    """A remote session must itself have used a public key before access is narrowed.
+
+    ``authorized_keys`` only says a key exists; a password login says nothing about whether the
+    administrator holds the matching private key. Only a publickey login proves it.
+    """
+    if not is_remote_session(ctx):
+        return None
+    method = session_auth_method(ctx)
+    if method == "publickey":
+        return None
+    if method is None:
+        return Manual("fix.reason.auth_unknown")
+    return Manual("fix.reason.logged_in_with_password", {"method": method})
 
 
 def plan_root_login(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
@@ -129,6 +147,9 @@ def plan_root_login(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
 
     if remote and user is None:
         return Manual("fix.reason.cannot_determine_user")
+    proof = _needs_proof(ctx)
+    if proof:
+        return proof
     if remote and user == "root":
         # Never cut the branch we are sitting on: keep root key logins.
         if not root_key:
@@ -162,6 +183,9 @@ def plan_password_auth(ctx: AuditContext, result: CheckResult) -> FixSpec | Manu
             return Manual("fix.reason.no_key_for_current_user", {"user": str(user)})
     elif not with_key:
         return Manual("fix.reason.no_admin_access")
+    proof = _needs_proof(ctx)
+    if proof:
+        return proof
     return _dropin_spec(ctx, result, "PasswordAuthentication", "no", True)
 
 
@@ -338,6 +362,7 @@ def _port_spec(
         change_args={"ports": shown},
         service_key="fix.service.reload_ssh",
         disruptive=True,
+        reload_service="ssh",
         verify=verify,
         next_key=next_key,
         next_args={"port": must_listen, "old": must_not_listen or "22"},

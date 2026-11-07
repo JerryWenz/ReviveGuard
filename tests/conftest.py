@@ -85,8 +85,17 @@ def build_host(root: Path, users: dict[str, dict], sshd_config: str = SSHD_MAIN)
     (root / "etc" / "group").write_text(f"sudo:x:27:{','.join(sudo_members)}\n")
 
 
-def ssh_runner(**overrides) -> FakeRunner:
+JOURNAL = ("journalctl", "-u", "ssh", "-u", "sshd", "--no-pager", "-o", "cat", "-n", "3000")
+ACCEPTED_KEY = (
+    "Accepted publickey for alice from 10.0.0.1 port 5555 ssh2: ED25519 SHA256:abc\n"
+    "Accepted publickey for root from 10.0.0.1 port 5555 ssh2: ED25519 SHA256:def\n"
+)
+
+
+def ssh_runner(accepted: str = ACCEPTED_KEY, **overrides) -> FakeRunner:
+    """Fake host tools; the SSH log says the test session (10.0.0.1:5555) used a key."""
     ok = {
+        JOURNAL: CommandResult(JOURNAL, 0, accepted),
         ("sshd", "-t"): CommandResult(("sshd", "-t"), 0),
         ("systemctl", "--version"): CommandResult(("systemctl", "--version"), 0),
         ("systemctl", "is-active", "--quiet", "ssh"): CommandResult(("x",), 0),
@@ -104,4 +113,6 @@ __all__ = [
     "build_host",
     "ssh_runner",
     "SSHD_MAIN",
+    "JOURNAL",
+    "ACCEPTED_KEY",
 ]

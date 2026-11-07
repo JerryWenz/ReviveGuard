@@ -19,7 +19,7 @@ from reviveguard.config import (
     to_toml,
 )
 from reviveguard.context import AuditContext
-from reviveguard.fixflow import cmd_admin_user, cmd_fix, cmd_wizard
+from reviveguard.fixflow import cmd_add_key, cmd_admin_user, cmd_fix, cmd_wizard
 from reviveguard.i18n import FALLBACK_LANGUAGE, Translator, available_languages
 from reviveguard.output import render_json, render_text
 from reviveguard.rollback import RollbackError, execute_rollback, plan_rollback
@@ -51,8 +51,15 @@ def build_parser() -> argparse.ArgumentParser:
     adm = sub.add_parser("admin-user", help="create a key-only sudo administrator account")
     adm.add_argument("--name", help="account name (default: ask, suggestion 'admin')")
     adm.add_argument("--key-file", type=Path, help="file with the public key (first key line)")
+    adm.add_argument(
+        "--no-key", action="store_true", help="create the account now, add the key later"
+    )
     adm.add_argument("--require-sudo-password", action="store_true", help="no NOPASSWD sudoers")
     adm.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    addk = sub.add_parser("add-key", help="add a login key to an existing account")
+    addk.add_argument("--name", required=True, help="account name")
+    addk.add_argument("--key-file", type=Path, help="file with the public key (first key line)")
+    addk.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     sub.add_parser("language", help="choose the interface language")
     cfg = sub.add_parser("config", help="show or change settings")
     cfg_sub = cfg.add_subparsers(dest="config_command")
@@ -113,6 +120,8 @@ def main(argv: list[str] | None = None, ctx: AuditContext | None = None) -> int:
     style = ui.detect(sys.stdout, args.no_color)
     if command == "fix":
         return cmd_fix(t, style, store, ctx or AuditContext(), config, args)
+    if command == "add-key":
+        return cmd_add_key(t, style, store, ctx or AuditContext(), config, args)
     if command == "admin-user":
         return cmd_admin_user(t, style, store, ctx or AuditContext(), config, args)
     if command == "wizard":
@@ -122,7 +131,7 @@ def main(argv: list[str] | None = None, ctx: AuditContext | None = None) -> int:
     if command == "history":
         return cmd_history(t, store)
     if command == "rollback":
-        return cmd_rollback(t, store, args.id, args.yes)
+        return cmd_rollback(t, store, args.id, args.yes, ctx or AuditContext())
     if command != "audit":
         print(t("error.unknown_command"), file=sys.stderr)
         return 2
@@ -158,7 +167,9 @@ def _latest_rollbackable(store: Store) -> str | None:
     return None
 
 
-def cmd_rollback(t: Translator, store: Store, op_id: str | None, assume_yes: bool) -> int:
+def cmd_rollback(
+    t: Translator, store: Store, op_id: str | None, assume_yes: bool, ctx: AuditContext
+) -> int:
     try:
         op_id = op_id or _latest_rollbackable(store)
         if op_id is None:
@@ -196,7 +207,7 @@ def cmd_rollback(t: Translator, store: Store, op_id: str | None, assume_yes: boo
             print(t("rollback.verify_failed", path=path), file=sys.stderr)
         return 1
     print(t("rollback.done", id=op.op_id))
-    return 0
+    return _reload_after_rollback(t, op, ctx)
 
 
 def cmd_config(t: Translator, config: Config, args) -> int:
@@ -267,3 +278,22 @@ def cmd_report(
     else:
         sys.stdout.write(text)
     return 0
+
+
+def _reload_after_rollback(t: Translator, op, ctx: AuditContext) -> int:
+    """Restored files only matter once the service re-reads them: reload it (never restart)."""
+    from reviveguard.fixes.fail2ban import activate_fail2ban
+    from reviveguard.fixes.ssh import reload_ssh
+
+    if op.reload_service == "ssh":
+        if not ctx.runner(["sshd", "-t"]).ok:
+            print(t("rollback.reload_skipped", service="ssh"), file=sys.stderr)
+            return 1
+        ok = reload_ssh(ctx)
+    elif op.reload_service == "fail2ban":
+        ok = activate_fail2ban(ctx)
+    else:
+        return 0
+    key = "rollback.reloaded" if ok else "rollback.reload_failed"
+    print(t(key, service=op.reload_service), file=sys.stdout if ok else sys.stderr)
+    return 0 if ok else 1

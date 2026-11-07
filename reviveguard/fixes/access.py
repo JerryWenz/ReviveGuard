@@ -57,15 +57,18 @@ def parse_pubkey(line: str) -> tuple[str, str] | None:
 
 
 def plan_admin_user(
-    ctx: AuditContext, username: str, pubkey_line: str, nopasswd: bool = True
+    ctx: AuditContext, username: str, pubkey_line: str | None, nopasswd: bool = True
 ) -> FixSpec | Manual:
+    """Plan the account. ``pubkey_line`` may be empty: the key can be added later (add-key)."""
     problem = validate_username(username)
     if problem:
         return Manual(problem)
-    parsed = parse_pubkey(pubkey_line)
-    if parsed is None:
-        return Manual("admin.err.bad_key")
-    key_line, fingerprint = parsed
+    key_line, fingerprint = None, "-"
+    if pubkey_line and pubkey_line.strip():
+        parsed = parse_pubkey(pubkey_line)
+        if parsed is None:
+            return Manual("admin.err.bad_key")
+        key_line, fingerprint = parsed
     if any(e.name == username for e in read_passwd(ctx)):
         return Manual("admin.err.exists", {"name": username})
     if "sudo" not in read_groups(ctx):
@@ -78,7 +81,7 @@ def plan_admin_user(
     home = f"/home/{username}"
     keys_path = ctx.path(f"{home}/.ssh/authorized_keys")
     sudoers_path = ctx.path(f"{SUDOERS_DIR}/90-reviveguard-{username}")
-    files = [keys_path] + ([sudoers_path] if nopasswd else [])
+    files = ([keys_path] if key_line else []) + ([sudoers_path] if nopasswd else [])
 
     def apply() -> None:
         proc = ctx.runner(
@@ -89,12 +92,13 @@ def plan_admin_user(
             raise RuntimeError(((proc.stderr or "useradd failed").strip().splitlines() or [""])[0])
         entry = next((e for e in read_passwd(ctx) if e.name == username), None)
         uid, gid = (entry.uid, entry.gid) if entry else (None, None)
-        keys_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(keys_path.parent, 0o700)
-        write_file_atomic(keys_path, key_line + "\n", 0o600)
-        if uid is not None:
-            os.chown(keys_path.parent, uid, gid)
-            os.chown(keys_path, uid, gid)
+        if key_line:
+            keys_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(keys_path.parent, 0o700)
+            write_file_atomic(keys_path, key_line + "\n", 0o600)
+            if uid is not None:
+                os.chown(keys_path.parent, uid, gid)
+                os.chown(keys_path, uid, gid)
         if nopasswd:
             sudoers_path.parent.mkdir(parents=True, exist_ok=True)
             write_file_atomic(sudoers_path, f"{username} ALL=(ALL) NOPASSWD:ALL\n", 0o440)
@@ -105,12 +109,20 @@ def plan_admin_user(
         proc = ctx.runner(["visudo", "-cf", str(sudoers_path)])
         return None if proc.ok else "sudoers file is invalid (visudo -cf failed)"
 
+    def exists() -> str | None:
+        done = any(e.name == username for e in read_passwd(ctx))
+        return None if done else "the account was not created"
+
+    if key_line:
+        next_key = "fix.next.admin_user" if nopasswd else "fix.next.admin_user_password"
+    else:
+        next_key = "fix.next.admin_user_nokey"
     return FixSpec(
         fix_id="access.admin_user.create",
         check_id="USR-001",
         description=(
             f"Create administrator '{username}' (sudo{', no sudo password' if nopasswd else ''}, "
-            f"login by key {fingerprint})"
+            f"{'login by key ' + fingerprint if key_line else 'no login key yet'})"
         ),
         files=files,
         apply=apply,
@@ -123,7 +135,47 @@ def plan_admin_user(
             "sudo": "NOPASSWD" if nopasswd else "password",
         },
         service_key="fix.access.user_stays",
-        next_key="fix.next.admin_user" if nopasswd else "fix.next.admin_user_password",
+        verify=None if key_line else exists,  # without a key USR-001 cannot pass yet
+        next_key=next_key,
+        next_args={"name": username},
+    )
+
+
+def plan_add_key(ctx: AuditContext, username: str, pubkey_line: str) -> FixSpec | Manual:
+    """Install a login key for an existing account (appends; never overwrites other keys)."""
+    entry = next((e for e in read_passwd(ctx) if e.name == username), None)
+    if entry is None or entry.uid == 0 or validate_username(username) is not None:
+        return Manual("admin.err.no_such_user", {"name": username})
+    parsed = parse_pubkey(pubkey_line)
+    if parsed is None:
+        return Manual("admin.err.bad_key")
+    key_line, fingerprint = parsed
+    keys_path = ctx.path(f"{entry.home.rstrip('/')}/.ssh/authorized_keys")
+
+    def apply() -> None:
+        existing = keys_path.read_text(encoding="utf-8") if keys_path.exists() else ""
+        if key_line in existing.splitlines():
+            return  # already installed
+        keys_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(keys_path.parent, 0o700)
+        text = (
+            existing + ("" if not existing or existing.endswith("\n") else "\n") + key_line + "\n"
+        )
+        write_file_atomic(keys_path, text, 0o600)
+        os.chown(keys_path.parent, entry.uid, entry.gid)
+        os.chown(keys_path, entry.uid, entry.gid)
+
+    return FixSpec(
+        fix_id="access.admin_key.add",
+        check_id="USR-001",
+        description=f"Add login key {fingerprint} for '{username}'",
+        files=[keys_path],
+        apply=apply,
+        validate=lambda: None,
+        activate=None,
+        change_key="fix.access.add_key",
+        change_args={"name": username, "fingerprint": fingerprint},
+        next_key="fix.next.key_added",
         next_args={"name": username},
     )
 

@@ -64,7 +64,17 @@ interfaces between minor releases.
 - Docker checks `DOC-001`..`DOC-008` (socket, docker group, exposed API, privileged/host-network/capabilities/
   sensitive mounts/root containers). Findings only.
 
+### Security
+- Disabling password login or root login now requires proof from the SSH log that the *current* session
+  authenticated with a public key (`publickey`). A key in `authorized_keys` proves nothing about what the
+  administrator holds: found when `wizard` disabled passwords for a root session that had logged in with a
+  password. Unknown or password logins are refused (manual).
+- The wizard no longer continues to the access-narrowing steps after the administrator account failed.
+
 ### Changed
+- `reviveguard rollback` reloads the service the operation touched (ssh/fail2ban, after validating sshd) so restored files
+  take effect.
+- The administrator's public key is optional at creation; `reviveguard add-key --name NAME` adds it later.
 - Fail2ban setup now works on bare images (found on a real Ubuntu 22.04 server): journald backend
   (`python3-systemd`) when there is no `/var/log/auth.log`, `iptables` + matching `banaction` when no
   firewall tool exists, and an installed-but-stopped fail2ban is started. The CLI states that

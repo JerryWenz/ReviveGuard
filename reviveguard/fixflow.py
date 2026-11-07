@@ -13,7 +13,12 @@ from reviveguard.backup import Store
 from reviveguard.config import Config
 from reviveguard.context import AuditContext
 from reviveguard.fixes import REGISTRY as FIXERS
-from reviveguard.fixes.access import admin_result, plan_admin_user, validate_username
+from reviveguard.fixes.access import (
+    admin_result,
+    plan_add_key,
+    plan_admin_user,
+    validate_username,
+)
 from reviveguard.i18n import Translator
 from reviveguard.models import CheckResult, Severity, Status
 from reviveguard.remediation import FixSpec, Manual, preflight, run_fix
@@ -323,14 +328,17 @@ def cmd_wizard(
         con.say(f"  {t('wizard.safe_none')}")
 
     con.say(f"\n{style.step(3, total, t('wizard.step.access'))}")
-    created_admin = False
+    created_admin = admin_failed = False
     if any(i.result.check_id == "USR-001" for i in manual) and code == 0:
         con.say(f"  {t('wizard.admin_offer')}")
         if con.ask(t("wizard.admin_confirm"), "y") in ("y", "yes"):
             created_admin = admin_flow(con, store, ctx, config) == 0
+            admin_failed = not created_admin
             manual = [i for i in manual if i.result.check_id != "USR-001"]
     if created_admin:
         con.say(f"  {t('wizard.admin_created')}")
+    elif admin_failed and needs_decision:
+        con.say(f"  {t('wizard.admin_failed_skip')}")
     elif needs_decision and code == 0:
         con.say(f"  {t('wizard.access_intro')}")
         counts, code = interactive(con, store, ctx, needs_decision)
@@ -385,6 +393,8 @@ def admin_flow(
     if key_line is None:
         con.say(f"  {t('admin.key_help')}")
         key_line = con.ask(t("admin.ask_key"), "", lower=False)
+    if not key_line:
+        con.say(f"  {t('admin.no_key_note', name=name)}")
     plan = plan_admin_user(ctx, name, key_line, nopasswd)
     if isinstance(plan, Manual):
         con.say(t(plan.reason_key, **plan.args), err=True)
@@ -397,21 +407,53 @@ def admin_flow(
     return 0 if apply_item(con, store, ctx, item) else 1
 
 
+def cmd_add_key(
+    t: Translator, style: ui.Style, store: Store, ctx: AuditContext, config: Config, args
+) -> int:
+    con = Console(t, style)
+    blocked = _guard(con, ctx, config)
+    if blocked is not None:
+        return blocked
+    key_line = _read_key_file(con, args.key_file) if args.key_file else None
+    if args.key_file and key_line is None:
+        return 1
+    if key_line is None:
+        con.say(f"  {t('admin.key_help')}")
+        key_line = con.ask(t("admin.ask_key"), "", lower=False)
+    plan = plan_add_key(ctx, args.name, key_line)
+    if isinstance(plan, Manual):
+        con.say(t(plan.reason_key, **plan.args), err=True)
+        return 1
+    item = Item(admin_result(), plan)
+    describe(con, ctx, item.result, plan)
+    if not args.yes and con.ask(t("fix.prompt"), "y") not in ("y", "yes"):
+        con.say(t("fix.skipped"))
+        return 1
+    return 0 if apply_item(con, store, ctx, item) else 1
+
+
+def _read_key_file(con: Console, path) -> str | None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        con.say(con.t("admin.err.key_file", detail=exc.strerror or str(exc)), err=True)
+        return None
+    return next((x for x in lines if x.strip() and not x.startswith("#")), "")
+
+
 def cmd_admin_user(
     t: Translator, style: ui.Style, store: Store, ctx: AuditContext, config: Config, args
 ) -> int:
+    con = Console(t, style)
     key_line = None
     if args.key_file:
-        try:
-            lines = args.key_file.read_text(encoding="utf-8").splitlines()
-        except OSError as exc:
-            Console(t, style).say(
-                t("admin.err.key_file", detail=exc.strerror or str(exc)), err=True
-            )
+        key_line = _read_key_file(con, args.key_file)
+        if key_line is None:
             return 1
-        key_line = next((x for x in lines if x.strip() and not x.startswith("#")), "")
+    elif args.no_key:
+        key_line = ""
     return admin_flow(
-        Console(t, style),
+        con,
         store,
         ctx,
         config,
