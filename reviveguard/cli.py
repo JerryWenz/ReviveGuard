@@ -211,6 +211,8 @@ def cmd_fix(t, store: Store, ctx: AuditContext, config: Config, args) -> int:
             print(f"  {t('label.remediation')}: {t(result.remediation_key)}")
             continue
         _describe(t, ctx, result, plan)
+        if not plan.reversible:
+            print(f"  {t('fix.not_reversible_note')}")
         answer = _ask(t("fix.prompt"))
         if answer == "q":
             print(t("fix.quit"))
@@ -237,5 +239,9 @@ def cmd_fix(t, store: Store, ctx: AuditContext, config: Config, args) -> int:
         if outcome.reverted:
             key = "fix.result.reverted" if outcome.revert_ok else "fix.result.revert_failed"
             print(t(key, id=outcome.op_id), file=sys.stderr)
+        elif outcome.op_id:
+            print(t("fix.result.not_reversible", id=outcome.op_id), file=sys.stderr)
     print("\n" + t("fix.summary", **counts))
+    if counts["applied"]:
+        print(t("fix.rerun_hint"))
     return exit_code

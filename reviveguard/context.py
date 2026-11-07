@@ -17,7 +17,7 @@ from reviveguard.system import CommandResult, OsInfo, detect_os, is_root, run_co
 @dataclass
 class AuditContext:
     root: Path = Path("/")
-    runner: Callable[[list[str]], CommandResult] = run_command
+    runner: Callable[..., CommandResult] = run_command  # runner(args, timeout=...)
     stat: Callable[[Path], os.stat_result] = os.stat
     os_info: OsInfo = field(default_factory=detect_os)
     running_as_root: bool = field(default_factory=is_root)
