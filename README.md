@@ -49,7 +49,7 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 
 ## Not implemented yet
 
-`config set` for individual rules beyond the supported keys, 2FA for SSH, auditd and password policy. See the roadmap below.
+2FA for SSH, auditd and a password-quality policy (planned). See the roadmap below.
 
 ## Requirements and tested platforms
 
