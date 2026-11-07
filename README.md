@@ -47,7 +47,7 @@ into the system and ReviveGuard into its own virtualenv, then runs a read-only a
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/claude/quirky-franklin-vnj8hz/install.sh
-less install.sh
+less install.sh      # scroll with space, press q to quit
 sudo bash install.sh
 ```
 

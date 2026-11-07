@@ -50,7 +50,7 @@
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/claude/quirky-franklin-vnj8hz/install.sh
-less install.sh
+less install.sh      # листайте пробелом, выход — клавиша q
 sudo bash install.sh
 ```
 
