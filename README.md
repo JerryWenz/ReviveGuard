@@ -7,13 +7,21 @@ Lightweight Linux server security auditor with (planned) controlled auto-remedia
 
 ## What works today
 
+- Modules: SSH, firewall, fail2ban, system updates, file permissions, kernel (sysctl), services/ports.
+  Docker checks are not implemented yet.
+- On a bare server `reviveguard fix` can, **after asking you each time**: refresh the apt index,
+  apply *security-only* updates, enable automatic security updates, install `ufw` (left disabled),
+  install `fail2ban` (your current SSH client address is whitelisted), tighten file permissions,
+  apply safe sysctl values and fix SSH settings. Package operations are recorded in the history but
+  **cannot be rolled back**; ReviveGuard never removes packages, reboots, or restarts services.
+
 - `reviveguard audit` — read-only; never modifies the system.
 - SSH checks `SSH-001`..`SSH-005`: root login, password authentication, empty passwords,
   public key authentication, `sshd_config` ownership/permissions.
 - Firewall checks `FW-001`..`FW-004` (UFW, nftables, iptables, firewalld) — findings only;
   firewall changes are always manual. Fail2ban checks `F2B-001`..`F2B-005`; the missing SSH jail
   (`F2B-002`) can be enabled by `fix`. Both modules need root to read their state.
-- `reviveguard fix [--category ssh] [--check SSH-002]` — interactive fixes for the SSH findings
+- `reviveguard fix [--category ssh|updates|permissions|sysctl|firewall|fail2ban] [--check SSH-002]` — interactive fixes for the SSH findings
   (needs root). Every fix is explained, backed up, confirmed by you, validated, verified and
   recorded; failures restore the original files automatically.
 - `reviveguard history` / `reviveguard rollback [--id FIX-YYYY-NNN] [--yes]` — backup store and
@@ -22,16 +30,29 @@ Lightweight Linux server security auditor with (planned) controlled auto-remedia
 
 ## Not implemented yet
 
-`fix --auto`, `report`, `config set`, and the Docker, updates, permissions, services and
-sysctl checks. See the roadmap below.
+`fix --auto`, `report`, `config set`, and the Docker checks. Enabling a firewall is always manual. See the roadmap below.
 
 ## Requirements and tested platforms
 
-- Python 3.11+; standard library only.
+- Python 3.10+ (Ubuntu 22.04 system Python is fine). Standard library only; `tomli` is pulled in
+  automatically on 3.10.
 - Target: Debian 12+, Ubuntu 22.04+. Development and tests so far ran on Ubuntu 24.04 only;
   no other OS has been verified yet.
 
 ## Install and run
+
+One command on a Debian/Ubuntu server (as root). The script lists what it will do, asks for
+confirmation, installs only missing prerequisites (`python3`, `python3-venv`, `ca-certificates`)
+into the system and ReviveGuard into its own virtualenv, then runs a read-only audit. Read it first:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/claude/quirky-franklin-vnj8hz/install.sh
+less install.sh
+sudo bash install.sh
+```
+
+(No `curl`? `apt-get update && apt-get install -y curl`. The ref in the URL and the script
+changes to a release tag once there is one.) Or manually:
 
 ```bash
 pip install -e .
@@ -96,7 +117,8 @@ sensitive files (e.g. `/etc/shadow`) are stored with mode 0600 inside a 0700 dir
 
 - SSH and fail2ban fixes are covered by tests with a faked system; they have **not** been run
   against real `sshd`/`fail2ban`/`systemd` yet. See [docs/vps-testing.ru.md](docs/vps-testing.ru.md).
-- Ubuntu 22.04 ships Python 3.10; ReviveGuard needs 3.11+ (Debian 12 and Ubuntu 24.04 are fine).
+- Tests run on Python 3.10–3.13 (3.10–3.13 locally and in the CI matrix); the installer and `audit` were
+  confirmed by the author on one real Ubuntu 22.04.5 server (read-only audit only).
 - Firewall checks read the rule sets as-is; conflicts are only detected for ufw + firewalld.
   Without an active firewall the policy/rule checks are not reported.
 -  Try them on a non-critical machine first.

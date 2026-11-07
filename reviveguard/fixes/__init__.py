@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from reviveguard.context import AuditContext
-from reviveguard.fixes import fail2ban, firewall, ssh, updates
+from reviveguard.fixes import fail2ban, firewall, permissions, ssh, sysctl, updates
 from reviveguard.models import CheckResult
 from reviveguard.remediation import FixSpec, Manual
 
@@ -39,6 +39,19 @@ REGISTRY: dict[str, Planner] = {
     "UPD-004": updates.plan_auto_updates,
     "UPD-003": manual_only("fix.reason.reboot_manual"),
     "UPD-005": manual_only("fix.reason.os_manual"),
+    "SVC-002": manual_only("fix.reason.service_manual"),
+    "PERM-001": permissions.plan_permissions,
+    "PERM-002": permissions.plan_permissions,
+    "PERM-003": permissions.plan_permissions,
+    "PERM-004": permissions.plan_permissions,
+    "SYS-001": manual_only("fix.reason.sysctl_manual"),
+    "SYS-002": sysctl.plan_sysctl,
+    "SYS-003": sysctl.plan_sysctl,
+    "SYS-004": sysctl.plan_sysctl,
+    "SYS-005": sysctl.plan_sysctl,
+    "SYS-006": sysctl.plan_sysctl,
+    "SYS-007": sysctl.plan_sysctl,
+    "SYS-008": manual_only("fix.reason.sysctl_manual"),
 }
 
 # Checks that have a real automatic fix (the rest only explain the manual steps).
