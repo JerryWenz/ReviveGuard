@@ -1,0 +1,27 @@
+# Example ReviveGuard configuration (TOML).
+# Install as /etc/reviveguard/config.toml or pass with --config.
+# Unknown keys and wrong types are rejected. Safety defaults are conservative.
+
+# language = "ru"   # "en" or "ru"; if unset, the locale (LANG) is used
+
+[audit]
+ssh = true
+firewall = true     # not implemented yet; accepted and ignored
+fail2ban = true     # not implemented yet
+docker = true       # not implemented yet
+updates = true      # not implemented yet
+permissions = true  # not implemented yet
+services = true     # not implemented yet
+sysctl = true       # not implemented yet
+
+[remediation]       # reserved: remediation is not implemented yet
+enabled = true
+require_confirmation = true
+allow_critical = false
+allow_high = false
+backup_before_change = true
+verify_after_change = true
+
+[report]
+format = "markdown"   # "markdown" or "json"
+redact_secrets = true # cannot be disabled
