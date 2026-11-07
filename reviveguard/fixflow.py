@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
+import signal
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,6 +35,34 @@ class Item:
 
 
 CONFIRM_SECONDS = 180
+
+
+@contextlib.contextmanager
+def guard_signals():
+    """Turn SIGHUP/SIGTERM (e.g. the SSH session dropping) into KeyboardInterrupt.
+
+    ``run_fix`` then restores the original files instead of leaving a change half applied.
+    """
+
+    def handler(signum, frame):
+        raise KeyboardInterrupt
+
+    previous = {}
+    for sig in (signal.SIGHUP, signal.SIGTERM):
+        try:
+            previous[sig] = signal.signal(sig, handler)
+        except (ValueError, OSError):  # not the main thread
+            pass
+    try:
+        yield
+    finally:
+        for sig, old in previous.items():
+            signal.signal(sig, old)
+
+
+def run_interactive(args: list[str]) -> int:
+    """Run a command attached to the user's terminal (e.g. ``passwd``). We never see its input."""
+    return subprocess.run(args, check=False).returncode
 
 
 def read_confirmation(timeout: int) -> bool:
@@ -136,7 +167,8 @@ def apply_item(con: Console, store: Store, ctx: AuditContext, item: Item) -> boo
     t, s = con.t, con.style
     spec = item.plan
     assert isinstance(spec, FixSpec)
-    outcome = run_fix(store, ctx, spec, confirm=lambda sp: live_confirm(con, sp))
+    with guard_signals():
+        outcome = run_fix(store, ctx, spec, confirm=lambda sp: live_confirm(con, sp))
     if outcome.status == "applied":
         con.say(f"  {s.paint('OK', 'green', 'bold')} {t('fix.result.applied', id=outcome.op_id)}")
         if spec.next_key:
