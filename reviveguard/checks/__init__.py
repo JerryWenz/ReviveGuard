@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from reviveguard.checks import (
+    accounts,
     fail2ban,
     firewall,
     permissions,
@@ -26,6 +27,7 @@ REGISTRY: dict[str, CheckFunc] = {
     "permissions": permissions.run,
     "services": services.run,
     "sysctl": sysctl.run,
+    "accounts": accounts.run,
 }
 
 # Check ID prefix -> category (used to find the module that owns a check ID).
@@ -37,4 +39,5 @@ PREFIXES = {
     "PERM": "permissions",
     "SVC": "services",
     "SYS": "sysctl",
+    "USR": "accounts",
 }

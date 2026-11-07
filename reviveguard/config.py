@@ -38,6 +38,7 @@ class AuditConfig:
     permissions: bool = True
     services: bool = True
     sysctl: bool = True
+    accounts: bool = True
 
     def enabled_modules(self) -> list[str]:
         return [f.name for f in fields(self) if getattr(self, f.name)]

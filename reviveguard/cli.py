@@ -19,7 +19,7 @@ from reviveguard.config import (
     to_toml,
 )
 from reviveguard.context import AuditContext
-from reviveguard.fixflow import cmd_fix, cmd_wizard
+from reviveguard.fixflow import cmd_admin_user, cmd_fix, cmd_wizard
 from reviveguard.i18n import FALLBACK_LANGUAGE, Translator, available_languages
 from reviveguard.output import render_json, render_text
 from reviveguard.rollback import RollbackError, execute_rollback, plan_rollback
@@ -48,6 +48,11 @@ def build_parser() -> argparse.ArgumentParser:
     rep = sub.add_parser("report", help="security report (markdown or json)")
     rep.add_argument("--format", choices=("markdown", "json"), help="default: from the config")
     rep.add_argument("--output", type=Path, help="write the report to this file")
+    adm = sub.add_parser("admin-user", help="create a key-only sudo administrator account")
+    adm.add_argument("--name", help="account name (default: ask, suggestion 'admin')")
+    adm.add_argument("--key-file", type=Path, help="file with the public key (first key line)")
+    adm.add_argument("--require-sudo-password", action="store_true", help="no NOPASSWD sudoers")
+    adm.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     sub.add_parser("language", help="choose the interface language")
     cfg = sub.add_parser("config", help="show or change settings")
     cfg_sub = cfg.add_subparsers(dest="config_command")
@@ -108,6 +113,8 @@ def main(argv: list[str] | None = None, ctx: AuditContext | None = None) -> int:
     style = ui.detect(sys.stdout, args.no_color)
     if command == "fix":
         return cmd_fix(t, style, store, ctx or AuditContext(), config, args)
+    if command == "admin-user":
+        return cmd_admin_user(t, style, store, ctx or AuditContext(), config, args)
     if command == "wizard":
         return cmd_wizard(t, style, store, ctx or AuditContext(), config, args, lang)
     if command == "report":
