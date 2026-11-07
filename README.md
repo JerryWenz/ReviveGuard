@@ -3,8 +3,9 @@
 Lightweight Linux server security auditor with (planned) controlled auto-remediation.
 
 > **Status: early development (0.1.0.dev1).** Audits (SSH, firewall, fail2ban, updates, permissions,
-> sysctl, services) and interactive fixes work in tests; the installer and the audit were tried on one
-> real server, the fixes only against a faked system.
+> sysctl, services) and interactive fixes work in tests. On one real Ubuntu 22.04 server the installer,
+> the audit and the sysctl and fail2ban fixes were tried (reported working by the author); all other
+> fixes (SSH, apt updates, ufw, permissions) have only run against a faked system.
 > Not production-ready, not security-reviewed. Русская версия: [README.ru.md](README.ru.md).
 
 ## What works today
@@ -120,8 +121,8 @@ sensitive files (e.g. `/etc/shadow`) are stored with mode 0600 inside a 0700 dir
 
 ## Known limitations
 
-- SSH and fail2ban fixes are covered by tests with a faked system; they have **not** been run
-  against real `sshd`/`fail2ban`/`systemd` yet. See [docs/vps-testing.ru.md](docs/vps-testing.ru.md).
+- SSH, apt, ufw and permission fixes are covered by tests with a faked system only; they have
+  **not** been run on a real server yet (sysctl and fail2ban were, once, on Ubuntu 22.04). See [docs/vps-testing.ru.md](docs/vps-testing.ru.md).
 - Tests run on Python 3.10–3.13 (3.10–3.13 locally and in the CI matrix); the installer and `audit` were
   confirmed by the author on one real Ubuntu 22.04.5 server (read-only audit only).
 - Firewall checks read the rule sets as-is; conflicts are only detected for ufw + firewalld.
