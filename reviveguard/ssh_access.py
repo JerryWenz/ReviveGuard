@@ -222,3 +222,34 @@ def admin_access(ctx: AuditContext, cfg: dict[str, str]) -> list[AdminAccess]:
             )
         )
     return result
+
+
+def strict_mode_problems(ctx: AuditContext, entry: PasswdEntry, path: str) -> list[str]:
+    """Why sshd (StrictModes) would reject ``path`` for ``entry``: wrong owner or too writable."""
+    problems = []
+    for location in (path, str(Path(path).parent), entry.home.rstrip("/") or "/"):
+        try:
+            st = ctx.stat(ctx.path(location))
+        except OSError:
+            continue
+        mode = stat_mod.S_IMODE(st.st_mode)
+        if st.st_uid not in (entry.uid, 0):
+            problems.append(f"{location}: owned by uid {st.st_uid}")
+        elif mode & 0o022:
+            problems.append(f"{location}: writable by group/others (mode {mode:04o})")
+    return problems
+
+
+def authorized_keys_problems(ctx: AuditContext, cfg: dict[str, str]) -> list[str]:
+    found = []
+    patterns = cfg.get("authorizedkeysfile", DEFAULT_AUTH_KEYS).split()
+    for entry in read_passwd(ctx):
+        if Path(entry.shell).name in NO_LOGIN_SHELLS:
+            continue
+        home = entry.home.rstrip("/") or "/"
+        for pattern in patterns:
+            expanded = pattern.replace("%h", home).replace("%u", entry.name).replace("%%", "%")
+            path = expanded if expanded.startswith("/") else f"{home}/{expanded}"
+            if ctx.path(path).is_file():
+                found += [f"{entry.name}: {p}" for p in strict_mode_problems(ctx, entry, path)]
+    return found

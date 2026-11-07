@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from reviveguard.context import AuditContext
-from reviveguard.fixes import fail2ban, firewall, permissions, ssh, sysctl, updates
+from reviveguard.fixes import fail2ban, firewall, passwords, permissions, ssh, sysctl, updates
 from reviveguard.models import CheckResult
 from reviveguard.remediation import FixSpec, Manual
 
@@ -57,6 +57,8 @@ REGISTRY: dict[str, Planner] = {
     "DOC-008": manual_only("fix.reason.docker_manual"),
     "USR-002": manual_only("fix.reason.lock_account"),
     "USR-003": manual_only("fix.reason.extra_root"),
+    "USR-004": passwords.plan_password_policy,
+    "SSH-012": manual_only("fix.reason.authkeys_manual"),
     "PERM-001": permissions.plan_permissions,
     "PERM-002": permissions.plan_permissions,
     "PERM-003": permissions.plan_permissions,

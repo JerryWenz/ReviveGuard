@@ -64,7 +64,17 @@ interfaces between minor releases.
 - Docker checks `DOC-001`..`DOC-008` (socket, docker group, exposed API, privileged/host-network/capabilities/
   sensitive mounts/root containers). Findings only.
 
+### Added (password-only hardening, no key required)
+- `SSH-012` authorized_keys / `~/.ssh` / home permissions (StrictModes), `USR-004` password-quality policy
+  (libpam-pwquality, 12 characters, new passwords only) with an automatic fix.
+- `admin-user` without a key offers to set the account's password (`passwd` runs on your terminal; ReviveGuard never sees
+  it) and keeps sudo asking for it; a password administrator counts for `USR-001`.
+- `SSH-001` can switch root login off for a root session that logged in with a password once a password administrator
+  exists; the live confirmation then asks you to log in as that administrator.
+
 ### Security
+- An interruption or error in ANY phase of a fix (including SIGHUP/SIGTERM when the SSH session drops) restores the
+  original files; a failing reload during the restore no longer aborts it.
 - Disabling password login or root login now requires proof from the SSH log that the *current* session
   authenticated with a public key (`publickey`). A key in `authorized_keys` proves nothing about what the
   administrator holds: found when `wizard` disabled passwords for a root session that had logged in with a

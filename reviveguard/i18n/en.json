@@ -384,5 +384,18 @@
   "fix.next.key_added": "open a NEW terminal and check that 'ssh {name}@<server>' works and 'sudo -v' succeeds. Then reconnect as {name} and run 'sudo reviveguard wizard' to switch off root login and passwords.",
   "wizard.admin_failed_skip": "The administrator account was not created, so I skip the steps that narrow access (root login, passwords): they could lock you out. Run 'reviveguard admin-user' and then 'reviveguard wizard' again.",
   "fix.confirm.ssh": "Open a NEW terminal NOW and log in to this server the way you normally do (with your key). Only if it works, type 'ok' here. If you cannot get in, do NOT type anything: the change will be reverted automatically.",
-  "fix.confirm.ssh_port": "Open a NEW terminal NOW and log in through port {port} ('ssh -p {port} <user>@<server>'). Only if it works, type 'ok' here. Otherwise type nothing: the change will be reverted automatically."
+  "fix.confirm.ssh_port": "Open a NEW terminal NOW and log in through port {port} ('ssh -p {port} <user>@<server>'). Only if it works, type 'ok' here. Otherwise type nothing: the change will be reverted automatically.",
+  "ssh.authkeys_perms.title": "authorized_keys permissions",
+  "ssh.authkeys_perms.desc": "sshd (StrictModes) silently ignores keys when the file, ~/.ssh or the home directory is writable by others or owned by someone else, so key logins stop working.",
+  "ssh.authkeys_perms.fix": "Fix the listed paths: 'chmod go-w <path>' and 'chown <user> <path>'.",
+  "fix.reason.authkeys_manual": "permissions inside home directories are fixed by hand: follow the recommendation.",
+  "accounts.password_policy.title": "Password quality policy",
+  "accounts.password_policy.desc": "Without a password-quality policy users can set short, guessable passwords; this matters most when passwords are the way in.",
+  "accounts.password_policy.fix": "Install libpam-pwquality and require at least 12 characters (ReviveGuard can do this; it affects new passwords only).",
+  "fix.passwords.policy": "require new passwords of at least {length} characters with 3 character classes (libpam-pwquality)",
+  "fix.confirm.ssh_root": "Open a NEW terminal NOW and log in as an ADMINISTRATOR, not as root ('ssh {admins}@<server>'), then check 'sudo -v'. Only if it works, type 'ok' here. Otherwise type nothing: root login will be restored automatically.",
+  "admin.ask_password": "Set a password for '{name}' now? [Y/n] ",
+  "admin.password_later": "Without a key and a password nobody can log in as '{name}'. Set a password later with 'passwd {name}' or add a key with 'reviveguard add-key --name {name}'.",
+  "admin.password_next": "open a NEW terminal and log in as {name} with this password; 'sudo -v' asks for it. Then run 'sudo reviveguard wizard': it will offer to switch off root login (your login by password stays).",
+  "admin.password_failed": "The password for '{name}' was not set. Try again with 'passwd {name}'."
 }

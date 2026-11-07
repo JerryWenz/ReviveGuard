@@ -426,6 +426,7 @@ def admin_flow(
         con.say(f"  {t('admin.key_help')}")
         key_line = con.ask(t("admin.ask_key"), "", lower=False)
     if not key_line:
+        nopasswd = False  # a password account must keep asking for its password on sudo
         con.say(f"  {t('admin.no_key_note', name=name)}")
     plan = plan_admin_user(ctx, name, key_line, nopasswd)
     if isinstance(plan, Manual):
@@ -436,7 +437,23 @@ def admin_flow(
     if not assume_yes and con.ask(t("fix.prompt"), "y") not in ("y", "yes"):
         con.say(t("fix.skipped"))
         return 1
-    return 0 if apply_item(con, store, ctx, item) else 1
+    if not apply_item(con, store, ctx, item):
+        return 1
+    if not key_line:
+        _offer_password(con, name)
+    return 0
+
+
+def _offer_password(con: Console, name: str) -> None:
+    """Let the user set the new account's password; ``passwd`` talks to the terminal itself."""
+    t = con.t
+    if con.ask(t("admin.ask_password", name=name), "y") not in ("y", "yes"):
+        con.say(f"  {t('admin.password_later', name=name)}")
+        return
+    if run_interactive(["passwd", name]) == 0:
+        con.say(f"  {con.style.bold(t('fix.next'))} {t('admin.password_next', name=name)}")
+    else:
+        con.say(f"  {t('admin.password_failed', name=name)}", err=True)
 
 
 def cmd_add_key(
