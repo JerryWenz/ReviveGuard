@@ -6,7 +6,10 @@ rejected instead of being silently ignored.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -120,3 +123,64 @@ def load_config(path: Path | None = None) -> Config:
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
         raise ConfigError(f"{target}: {exc}") from exc
     return parse_config(data)
+
+
+def config_to_dict(config: Config) -> dict:
+    data: dict = {}
+    if config.language is not None:
+        data["language"] = config.language
+    for name in ("audit", "remediation", "report"):
+        data[name] = {
+            f.name: getattr(getattr(config, name), f.name) for f in fields(getattr(config, name))
+        }
+    return data
+
+
+def _toml_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return json.dumps(str(value), ensure_ascii=False)  # JSON string escapes are valid TOML
+
+
+def to_toml(config: Config) -> str:
+    data = config_to_dict(config)
+    lines = ["# ReviveGuard configuration. Edit by hand or use 'reviveguard config set'."]
+    if "language" in data:
+        lines.append(f"language = {_toml_value(data.pop('language'))}")
+    for section, values in data.items():
+        lines += ["", f"[{section}]"] + [f"{k} = {_toml_value(v)}" for k, v in values.items()]
+    return "\n".join(lines) + "\n"
+
+
+def set_value(config: Config, key: str, raw: str) -> Config:
+    """Return a new Config with ``key`` (e.g. ``language`` or ``audit.ssh``) set from text."""
+    data = config_to_dict(config)
+    target, _, leaf = key.rpartition(".")
+    table = data.get(target) if target else data
+    if not isinstance(table, dict) or (
+        leaf not in table and not (not target and leaf == "language")
+    ):
+        raise ConfigError(f"unknown setting: {key}")
+    current = table.get(leaf)
+    if isinstance(current, bool):
+        if raw.lower() not in ("true", "false"):
+            raise ConfigError(f"{key} must be true or false")
+        value: object = raw.lower() == "true"
+    else:
+        value = raw
+    table[leaf] = value
+    return parse_config(data)  # full validation, including safety rules
+
+
+def save_config(config: Config, path: Path | None = None) -> Path:
+    target = path or DEFAULT_CONFIG_PATH
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".config-", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(to_toml(config))
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, target)
+    except OSError as exc:
+        raise ConfigError(exc.strerror or str(exc)) from exc
+    return target
