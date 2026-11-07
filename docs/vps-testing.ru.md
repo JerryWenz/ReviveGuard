@@ -30,6 +30,21 @@ python3 -m venv ~/rg-venv
 ~/rg-venv/bin/python -m pytest -q          # тесты на самом сервере
 ```
 
+### Ubuntu 22.04: сначала поставьте Python 3.11
+
+Системный Python здесь 3.10, а ReviveGuard требует 3.11+. Самый простой путь — PPA deadsnakes:
+
+```bash
+sudo apt update && sudo apt install -y software-properties-common git
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt install -y python3.11 python3.11-venv
+python3.11 --version      # должно быть 3.11.x
+```
+
+В командах установки выше замените `python3 -m venv ~/rg-venv` на
+`python3.11 -m venv ~/rg-venv`. Остальное без изменений. На 22.04 стоит fail2ban 0.11 (источник
+логов `auto`, файл `/var/log/auth.log`) — это нормально, проверки это учитывают.
+
 Дальше везде `RG="sudo $HOME/rg-venv/bin/reviveguard"`:
 
 ```bash
