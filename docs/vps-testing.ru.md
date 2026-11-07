@@ -24,7 +24,7 @@ sudo usermod -aG sudo rgtest
 ```bash
 apt-get update && apt-get install -y curl      # только если curl нет
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/claude/quirky-franklin-vnj8hz/install.sh
-less install.sh
+less install.sh      # листайте пробелом, выход — клавиша q
 bash install.sh
 ```
 

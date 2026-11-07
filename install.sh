@@ -2,7 +2,7 @@
 # ReviveGuard installer for Debian/Ubuntu. Run as root.
 #
 #   curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/<ref>/install.sh
-#   less install.sh            # read it first
+#   less install.sh            # read it first (press q to quit the viewer)
 #   sudo bash install.sh
 #
 # What it does (and asks before doing it):
