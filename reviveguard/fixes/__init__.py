@@ -13,6 +13,7 @@ from reviveguard.fixes import (
     ssh,
     sysctl,
     timesync,
+    tuning,
     updates,
 )
 from reviveguard.models import CheckResult
@@ -70,6 +71,9 @@ REGISTRY: dict[str, Planner] = {
     "SSH-012": manual_only("fix.reason.authkeys_manual"),
     "TIME-001": timesync.plan_enable_ntp,
     "TIME-002": manual_only("fix.reason.timezone_manual"),
+    "TUN-001": tuning.plan_bbr,
+    "TUN-002": tuning.plan_ipv6,
+    "TUN-003": tuning.plan_swap,
     "PERM-001": permissions.plan_permissions,
     "PERM-002": permissions.plan_permissions,
     "PERM-003": permissions.plan_permissions,

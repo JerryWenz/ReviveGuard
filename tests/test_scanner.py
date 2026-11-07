@@ -26,6 +26,7 @@ def test_broken_check_is_isolated(make_ctx, monkeypatch):
             accounts=False,
             docker=False,
             time=False,
+            tuning=False,
         )
     )
     report = run_audit(make_ctx(), only_ssh)

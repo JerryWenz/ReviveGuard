@@ -8,13 +8,16 @@
 ssh = true
 firewall = true
 fail2ban = true
-docker = true       # not implemented yet
-updates = true      # not implemented yet
-permissions = true  # not implemented yet
-services = true     # not implemented yet
-sysctl = true       # not implemented yet
+docker = true
+updates = true
+permissions = true
+services = true
+sysctl = true
+accounts = true
+time = true
+tuning = true      # BBR, IPv6, swap file (optional improvements)
 
-[remediation]       # `enabled = false` disables `fix`; allow_* apply to future `fix --auto`
+[remediation]       # `enabled = false` disables `fix`; allow_critical/allow_high are the policy for `fix --auto`
 enabled = true
 require_confirmation = true
 allow_critical = false

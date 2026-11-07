@@ -24,7 +24,7 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 ## What works today
 
 - Modules: SSH, firewall, fail2ban, system updates, file permissions, kernel (sysctl), services/ports,
-  accounts, Docker, time synchronization and time zone.
+  accounts, Docker, time synchronization and time zone, server tuning (BBR, IPv6, swap file).
 - Professional hardening, step by step: a dedicated key-only administrator (`admin-user`), then switch off
   root login and passwords, move SSH to another port in two safe phases (the old port stays until you log in
   through the new one), fail2ban on the right ports, ufw with default deny and a live-confirmation safety net.
@@ -62,11 +62,10 @@ affect access or restart services, and skips CRITICAL/HIGH findings unless the c
 
 One command on a Debian/Ubuntu server (as root). The script lists what it will do, asks for
 confirmation, installs only missing prerequisites (`python3`, `python3-venv`, `ca-certificates`)
-into the system and ReviveGuard into its own virtualenv, then runs a read-only audit. Read it first:
+into the system and ReviveGuard into its own virtualenv, then runs a read-only audit:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/JerryWenz/ReviveGuard/main/install.sh
-less install.sh      # scroll with space, press q to quit
 sudo bash install.sh
 ```
 

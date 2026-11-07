@@ -67,6 +67,14 @@ The first merge into `main`. Still a pre-release (0.1.0.dev1): early development
 - Docker checks `DOC-001`..`DOC-008` (socket, docker group, exposed API, privileged/host-network/capabilities/
   sensitive mounts/root containers). Findings only.
 
+### Added (tuning)
+- `TUN-001` BBR congestion control (fq + bbr via sysctl and modules-load drop-ins), `TUN-002` disable IPv6 and `TUN-003`
+  a 2 GiB swap file on a small server without swap. Findings are LOW (optimizations, not vulnerabilities); skipped in containers;
+  the `tuning` audit flag turns them off.
+- IPv6 is only disabled with a live confirmation and never when your session or the host depends on it (IPv6 session,
+  IPv6-only host, unknown state). The swap file is mode 0600, refused on btrfs/zfs/tmpfs/overlay or too little disk, and
+  never overwrites an existing `/swapfile`. A failed fix undoes its runtime effect (congestion control, IPv6, swapoff + delete).
+
 ### Added (time)
 - `TIME-001` clock synchronization (fix: `timedatectl set-ntp true`, installs systemd-timesyncd on bare images) and
   `TIME-002` server time zone (recommendation to use UTC; never changed automatically). Skipped in containers.
