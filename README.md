@@ -8,6 +8,19 @@ Lightweight Linux server security auditor with (planned) controlled auto-remedia
 > fixes (SSH, apt updates, ufw, permissions) have only run against a faked system.
 > Not production-ready, not security-reviewed. Русская версия: [README.ru.md](README.ru.md).
 
+## Quick start
+
+```bash
+sudo reviveguard wizard        # guided: scan -> safe fixes (one confirmation) -> decisions -> report
+sudo reviveguard report        # full report (markdown; --format json, --output FILE)
+sudo reviveguard fix --auto    # show the reviewed safe set, confirm once, apply
+```
+
+The terminal UI shows a logo and colors only on a real terminal (`--no-color` or `NO_COLOR=1`
+turns colors off; pipes and logs get plain text). Automatic mode never applies fixes that can
+affect access or restart services, and skips CRITICAL/HIGH findings unless the config policy
+(`allow_critical`, `allow_high`) allows them.
+
 ## What works today
 
 - Modules: SSH, firewall, fail2ban, system updates, file permissions, kernel (sysctl), services/ports.

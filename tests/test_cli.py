@@ -232,11 +232,6 @@ def test_fix_requires_root(make_ctx, fake_root, capsys, monkeypatch, tmp_path):
     assert rc == 1 and "must be run as root" in err
 
 
-def test_fix_auto_not_implemented(make_ctx, capsys, monkeypatch, tmp_path):
-    rc, _, err = run_cli(fix_args(tmp_path, "--auto"), make_ctx(), capsys, monkeypatch, tmp_path)
-    assert rc == 2 and "not implemented" in err
-
-
 def test_fix_disabled_in_config(make_ctx, capsys, monkeypatch, tmp_path):
     cfg = tmp_path / "c.toml"
     cfg.write_text("[remediation]\nenabled = false\n")

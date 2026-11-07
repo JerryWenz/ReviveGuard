@@ -46,6 +46,14 @@ interfaces between minor releases.
 - `reviveguard language` (interactive choice) and `reviveguard config set|show`
   (e.g. `config set language ru`); `install.sh` asks for the language (`--lang en|ru`).
 
+- REVIVE logo, colors and command highlighting (TTY only, `--no-color`/`NO_COLOR`).
+- `reviveguard wizard`: guided scan -> one-confirmation safe fixes -> separate decisions -> final scan
+  and saved report.
+- `reviveguard fix --auto [--yes]`: reviewed set, one confirmation, policy for CRITICAL/HIGH,
+  disruptive fixes excluded, stops at the first failure.
+- `reviveguard report [--format markdown|json] [--output FILE]`: findings by severity, applied fixes with
+  verification, outstanding risks, secrets redacted, deliberately no numeric score.
+
 ### Changed
 - Fail2ban setup now works on bare images (found on a real Ubuntu 22.04 server): journald backend
   (`python3-systemd`) when there is no `/var/log/auth.log`, `iptables` + matching `banaction` when no
