@@ -21,7 +21,7 @@ import stat as stat_mod
 import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 STATE_DIR = Path("/var/lib/reviveguard")
@@ -43,7 +43,7 @@ def sha256_file(path: Path) -> str:
 
 
 def utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 @dataclass
