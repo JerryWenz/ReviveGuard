@@ -67,6 +67,9 @@ OpenSSH defaults) instead of `sshd -T`; the report says which source was used.
 
 ## Configuration
 
+Choose the language with `reviveguard language`, or `reviveguard config set language ru`
+(the installer asks, too). See all settings with `reviveguard config show`.
+
 TOML, default path `/etc/reviveguard/config.toml` or `--config FILE`; see
 [examples/config.toml](examples/config.toml). Unknown keys are rejected.
 Language priority: `--lang`, config `language`, locale (`LANG`), English.

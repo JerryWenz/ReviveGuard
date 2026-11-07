@@ -43,7 +43,12 @@ interfaces between minor releases.
 - `install.sh`: one-command installer (confirmation, only missing prerequisites, own virtualenv).
 - Python 3.10 support (Ubuntu 22.04 system Python).
 
+- `reviveguard language` (interactive choice) and `reviveguard config set|show`
+  (e.g. `config set language ru`); `install.sh` asks for the language (`--lang en|ru`).
+
 ### Changed
+- `install.sh` no longer lets needrestart restart services (list-only mode).
+- Check titles are neutral topic names (a green `[OK]` never reads like a problem).
 - sshd configuration values keep their original case (user names and paths are case-sensitive).
 
 ### Not implemented yet

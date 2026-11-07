@@ -12,7 +12,7 @@
 #   4. runs a read-only audit
 # It never changes SSH, firewall or any other system configuration.
 #
-# Options: --yes (no prompt)  --no-audit  --help
+# Options: --yes (no prompt)  --no-audit  --lang en|ru  --help
 # Environment: REVIVEGUARD_REF (git ref, default below), REVIVEGUARD_SRC (local path or URL to
 # install from instead), REVIVEGUARD_PREFIX (default /opt/reviveguard), REVIVEGUARD_BIN_DIR.
 set -euo pipefail
@@ -24,18 +24,22 @@ BIN_DIR="${REVIVEGUARD_BIN_DIR:-/usr/local/bin}"
 SRC="${REVIVEGUARD_SRC:-https://github.com/${REPO}/archive/${REF}.tar.gz}"
 ASSUME_YES=0
 RUN_AUDIT=1
+LANG_CHOICE="${REVIVEGUARD_LANG:-}"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-for arg in "$@"; do
-  case "$arg" in
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --yes|-y) ASSUME_YES=1 ;;
     --no-audit) RUN_AUDIT=0 ;;
+    --lang) shift; LANG_CHOICE="${1:-}" ;;
     --help|-h) sed -n '2,17p' "$0"; exit 0 ;;
-    *) die "unknown option: $arg" ;;
+    *) die "unknown option: $1" ;;
   esac
+  shift
 done
+case "$LANG_CHOICE" in ""|en|ru) ;; *) die "unsupported language '$LANG_CHOICE' (en or ru)" ;; esac
 
 [ "$(id -u)" -eq 0 ] || die "run as root (sudo bash install.sh)"
 [ -r /etc/os-release ] || die "cannot detect the operating system"
@@ -66,6 +70,12 @@ else
 fi
 say "  then         : $([ "$RUN_AUDIT" -eq 1 ] && echo 'read-only audit' || echo 'no audit')"
 
+if [ -z "$LANG_CHOICE" ] && [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
+  printf 'Language / Язык:  1) English   2) Русский   [1/2, default 1]: '
+  read -r lang_answer
+  case "$lang_answer" in 2|ru|RU) LANG_CHOICE=ru ;; *) LANG_CHOICE=en ;; esac
+fi
+
 if [ "$ASSUME_YES" -ne 1 ]; then
   [ -t 0 ] || die "no terminal for confirmation; re-run with --yes"
   printf 'Continue? [y/N] '
@@ -74,7 +84,9 @@ if [ "$ASSUME_YES" -ne 1 ]; then
 fi
 
 if [ "${#NEED_PKGS[@]}" -gt 0 ]; then
-  export DEBIAN_FRONTEND=noninteractive
+  # Never let needrestart restart services behind your back: list only.
+  export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1
+  export APT_LISTCHANGES_FRONTEND=none
   apt-get update
   apt-get install -y --no-install-recommends "${NEED_PKGS[@]}"
   python_ok || die "Python >= 3.10 with venv is still unavailable (this release needs 3.10+)"
@@ -87,6 +99,9 @@ mkdir -p "$BIN_DIR"
 ln -sf "$PREFIX/venv/bin/reviveguard" "$BIN_DIR/reviveguard"
 
 "$BIN_DIR/reviveguard" --version
+if [ -n "$LANG_CHOICE" ]; then
+  "$BIN_DIR/reviveguard" config set language "$LANG_CHOICE"
+fi
 say
 say "Installed. Useful commands:"
 say "  reviveguard audit      # read-only report"

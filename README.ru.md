@@ -70,6 +70,9 @@ OpenSSH по умолчанию); в отчёте указан использо�
 
 ## Конфигурация
 
+Язык выбирается командой `reviveguard language` или `reviveguard config set language ru`
+(установщик тоже спрашивает). Все настройки: `reviveguard config show`.
+
 TOML: `/etc/reviveguard/config.toml` или `--config ФАЙЛ`, пример — `examples/config.toml`.
 Неизвестные ключи отвергаются. Приоритет языка: `--lang`, `language` в конфиге, локаль `LANG`, английский.
 

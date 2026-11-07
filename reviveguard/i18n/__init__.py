@@ -32,7 +32,7 @@ class Translator:
     def __init__(self, lang: str = FALLBACK_LANGUAGE) -> None:
         self.lang = lang if lang in available_languages() else FALLBACK_LANGUAGE
 
-    def __call__(self, key: str, **kwargs: object) -> str:
+    def __call__(self, key: str, /, **kwargs: object) -> str:
         template = _load(self.lang).get(key) or _load(FALLBACK_LANGUAGE).get(key) or key
         try:
             return template.format(**kwargs)

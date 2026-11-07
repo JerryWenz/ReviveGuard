@@ -9,7 +9,14 @@ from pathlib import Path
 
 from reviveguard import __version__
 from reviveguard.backup import STATE_DIR, BackupError, Store
-from reviveguard.config import Config, ConfigError, load_config
+from reviveguard.config import (
+    Config,
+    ConfigError,
+    load_config,
+    save_config,
+    set_value,
+    to_toml,
+)
 from reviveguard.context import AuditContext
 from reviveguard.fixes import REGISTRY as FIXERS
 from reviveguard.i18n import FALLBACK_LANGUAGE, Translator, available_languages
@@ -35,6 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     fix.add_argument("--category", help="only findings of this category (e.g. ssh)")
     fix.add_argument("--check", help="only this check ID (e.g. SSH-002)")
     fix.add_argument("--auto", action="store_true", help="(not implemented yet)")
+    sub.add_parser("language", help="choose the interface language")
+    cfg = sub.add_parser("config", help="show or change settings")
+    cfg_sub = cfg.add_subparsers(dest="config_command")
+    cfg_set = cfg_sub.add_parser("set", help="e.g. config set language ru")
+    cfg_set.add_argument("key")
+    cfg_set.add_argument("value")
+    cfg_sub.add_parser("show", help="print the effective configuration")
     sub.add_parser("history", help="list recorded remediation operations")
     rollback = sub.add_parser("rollback", help="restore files changed by an operation")
     rollback.add_argument("--id", help="operation id, e.g. FIX-2026-001 (default: latest)")
@@ -65,8 +79,13 @@ def main(argv: list[str] | None = None, ctx: AuditContext | None = None) -> int:
     try:
         config = load_config(args.config)
     except ConfigError as exc:
-        print(Translator(FALLBACK_LANGUAGE)("error.bad_config", detail=str(exc)), file=sys.stderr)
-        return 2
+        creating = command in ("config", "language") and args.config and not args.config.exists()
+        if creating:
+            config = Config()  # 'config set' may create the file it was pointed at
+        else:
+            message = Translator(FALLBACK_LANGUAGE)("error.bad_config", detail=str(exc))
+            print(message, file=sys.stderr)
+            return 2
 
     lang = resolve_language(args.lang, config, dict(os.environ))
     if lang is None:
@@ -76,6 +95,10 @@ def main(argv: list[str] | None = None, ctx: AuditContext | None = None) -> int:
     t = Translator(lang)
 
     store = Store(args.state_dir)
+    if command == "config":
+        return cmd_config(t, config, args)
+    if command == "language":
+        return cmd_language(t, config, args)
     if command == "fix":
         return cmd_fix(t, store, ctx or AuditContext(), config, args)
     if command == "history":
@@ -245,3 +268,52 @@ def cmd_fix(t, store: Store, ctx: AuditContext, config: Config, args) -> int:
     if counts["applied"]:
         print(t("fix.rerun_hint"))
     return exit_code
+
+
+def cmd_config(t: Translator, config: Config, args) -> int:
+    if args.config_command == "show":
+        sys.stdout.write(to_toml(config))
+        return 0
+    if args.config_command != "set":
+        print(t("config.usage"), file=sys.stderr)
+        return 2
+    try:
+        updated = set_value(config, args.key, args.value)
+    except ConfigError as exc:
+        print(t("config.bad_value", key=args.key, detail=str(exc)), file=sys.stderr)
+        return 2
+    try:
+        path = save_config(updated, args.config)
+    except ConfigError as exc:
+        print(t("error.config_write", detail=str(exc)), file=sys.stderr)
+        return 1
+    value = getattr(updated, args.key, None) if "." not in args.key else args.value
+    new_t = Translator(updated.language) if args.key == "language" else t
+    print(
+        new_t(
+            "config.saved",
+            key=args.key,
+            value=value if value is not None else args.value,
+            path=path,
+        )
+    )
+    return 0
+
+
+def cmd_language(t: Translator, config: Config, args) -> int:
+    codes = available_languages()
+    for number, code in enumerate(codes, 1):
+        print(f"  {number}) {code} - {Translator(code)('lang.native')}")
+    try:
+        answer = input(t("language.prompt")).strip().lower()
+    except EOFError:
+        print(t("language.no_terminal"), file=sys.stderr)
+        return 1
+    chosen = (
+        codes[int(answer) - 1] if answer.isdigit() and 0 < int(answer) <= len(codes) else answer
+    )
+    if chosen not in codes:
+        print(t("language.invalid"), file=sys.stderr)
+        return 1
+    args.config_command, args.key, args.value = "set", "language", chosen
+    return cmd_config(t, config, args)

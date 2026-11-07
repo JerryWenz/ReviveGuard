@@ -58,3 +58,10 @@ def test_every_check_key_exists_in_english():
         assert isinstance(en[key], str)
     for module in REGISTRY:
         assert f"{module}.module.title" in en
+
+
+def test_message_arguments_may_be_called_key():
+    # regression: a message argument named "key" must not clash with the lookup key
+    assert Translator("en")("config.saved", key="language", value="ru", path="/x") == (
+        "Saved: language = ru (/x)"
+    )
