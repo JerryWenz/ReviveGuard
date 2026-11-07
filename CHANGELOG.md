@@ -64,6 +64,10 @@ interfaces between minor releases.
 - Docker checks `DOC-001`..`DOC-008` (socket, docker group, exposed API, privileged/host-network/capabilities/
   sensitive mounts/root containers). Findings only.
 
+### Added (time)
+- `TIME-001` clock synchronization (fix: `timedatectl set-ntp true`, installs systemd-timesyncd on bare images) and
+  `TIME-002` server time zone (recommendation to use UTC; never changed automatically). Skipped in containers.
+
 ### Added (password-only hardening, no key required)
 - `SSH-012` authorized_keys / `~/.ssh` / home permissions (StrictModes), `USR-004` password-quality policy
   (libpam-pwquality, 12 characters, new passwords only) with an automatic fix.
