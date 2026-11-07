@@ -2,8 +2,10 @@
 
 Lightweight Linux server security auditor with (planned) controlled auto-remediation.
 
-> **Status: early development (0.1.0.dev0).** Only read-only auditing of SSH settings is
-> implemented. Not production-ready, not security-reviewed. Русская версия: [README.ru.md](README.ru.md).
+> **Status: early development (0.1.0.dev1).** Audits (SSH, firewall, fail2ban, updates, permissions,
+> sysctl, services) and interactive fixes work in tests; the installer and the audit were tried on one
+> real server, the fixes only against a faked system.
+> Not production-ready, not security-reviewed. Русская версия: [README.ru.md](README.ru.md).
 
 ## What works today
 

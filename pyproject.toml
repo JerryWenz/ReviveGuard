@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reviveguard"
-version = "0.1.0.dev0"
+version = "0.1.0.dev1"
 description = "Linux security auditing and controlled auto-remediation tool"
 readme = "README.md"
 requires-python = ">=3.10"

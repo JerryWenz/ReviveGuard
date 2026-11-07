@@ -94,7 +94,9 @@ fi
 
 python3 -m venv "$PREFIX/venv"
 "$PREFIX/venv/bin/python" -m pip install --quiet --upgrade pip
-"$PREFIX/venv/bin/python" -m pip install --quiet "$SRC"
+# --force-reinstall --no-cache-dir: pip keeps old code when the version number is unchanged
+# (and caches builds by URL), so a re-run would silently leave an outdated install.
+"$PREFIX/venv/bin/python" -m pip install --quiet --upgrade --force-reinstall --no-cache-dir "$SRC"
 mkdir -p "$BIN_DIR"
 ln -sf "$PREFIX/venv/bin/reviveguard" "$BIN_DIR/reviveguard"
 

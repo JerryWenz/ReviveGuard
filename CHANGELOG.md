@@ -47,6 +47,8 @@ interfaces between minor releases.
   (e.g. `config set language ru`); `install.sh` asks for the language (`--lang en|ru`).
 
 ### Changed
+- `install.sh` re-runs now really update an existing install (`--force-reinstall --no-cache-dir`);
+  pip kept the old code when the version number was unchanged. Version bumped to 0.1.0.dev1.
 - `install.sh` no longer lets needrestart restart services (list-only mode).
 - Check titles are neutral topic names (a green `[OK]` never reads like a problem).
 - sshd configuration values keep their original case (user names and paths are case-sensitive).
