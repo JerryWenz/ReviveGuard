@@ -163,7 +163,7 @@
   "fix.updates.security": "upgrade {count} package(s) from the security pocket only: {packages}",
   "fix.updates.auto": "install unattended-upgrades and write {path}",
   "fix.firewall.install_ufw": "install the ufw package (it stays disabled; no firewall rules are changed)",
-  "fix.fail2ban.install": "install fail2ban and whitelist your current SSH client address ({ip})",
+  "fix.fail2ban.install": "set up fail2ban (packages: {packages}), enable the sshd jail with a log source and ban mechanism that exist on this host, and whitelist your SSH address ({ip})",
   "fix.service.packages_may_restart": "Upgrades can restart services (for example ssh); existing sessions normally survive. A reboot may be needed afterwards.",
   "fix.not_reversible_note": "Package changes cannot be undone by 'reviveguard rollback'; the operation is only recorded in the history.",
   "fix.result.not_reversible": "Package changes are not rolled back automatically ({id}). Check the state with 'dpkg --audit' and 'apt-get -f install' if needed.",
@@ -235,5 +235,7 @@
   "config.unknown_key": "Unknown setting: {key}",
   "config.bad_value": "Invalid value for {key}: {detail}",
   "error.config_write": "Cannot write the configuration ({detail}). Run as root or use --config.",
-  "config.usage": "Usage: reviveguard config set <key> <value> | reviveguard config show"
+  "config.usage": "Usage: reviveguard config set <key> <value> | reviveguard config show",
+  "fix.service.start_fail2ban": "Fail2ban will be started or reloaded (not restarted). Repeated failed logins from your own address could get it banned.",
+  "fix.result.packages_remain": "Note: installed packages stay on the system and are not removed: {packages}."
 }

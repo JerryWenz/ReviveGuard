@@ -1,7 +1,7 @@
-"""Fail2ban fixes. Only the SSH jail is enabled automatically, through a drop-in file.
+"""Fail2ban fixes: install/start fail2ban and enable the SSH jail through a drop-in file.
 
-Fail2ban is reloaded (``fail2ban-client reload``), never restarted. Installing packages is
-never done automatically.
+A running fail2ban is reloaded, never restarted; a stopped one is started. Packages are only
+installed with the user's confirmation (allow-listed) and are never removed.
 """
 
 from __future__ import annotations
@@ -35,10 +35,7 @@ def plan_ssh_jail(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
         return Manual("fix.reason.no_fail2ban_dir")
     port = ssh_port(ctx)
     path = ctx.path(f"{JAIL_DIR}/{DROPIN}")
-    text = (
-        f"# Managed by ReviveGuard ({result.check_id}). Remove this file to undo.\n"
-        f"[{JAIL}]\nenabled = true\nport = {port}\n"
-    )
+    text = jail_text(ctx, result.check_id, port, None)
     return FixSpec(
         fix_id="fail2ban.sshd_jail.enable",
         check_id=result.check_id,
@@ -46,14 +43,54 @@ def plan_ssh_jail(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
         files=[path],
         apply=lambda: write_file_atomic(path, text, 0o644),
         validate=lambda: _config_error(ctx),
-        activate=lambda: ctx.runner(["fail2ban-client", "reload"]).ok,
+        activate=lambda: activate_fail2ban(ctx),
         change_key="fix.fail2ban.enable_jail",
         change_args={"path": f"{JAIL_DIR}/{DROPIN}", "port": port},
         service_key="fix.service.reload_fail2ban",
     )
 
 
-IGNOREIP_DROPIN = "reviveguard-ignoreip.local"
+def tool_present(ctx: AuditContext, name: str) -> bool:
+    return not ctx.runner([name, "--version"]).missing
+
+
+def needs_journal_backend(ctx: AuditContext) -> bool:
+    """Minimal images have no auth.log (no rsyslog); sshd then logs only to journald."""
+    return not ctx.path("/var/log/auth.log").is_file() and ctx.path("/run/systemd/journal").exists()
+
+
+def choose_banaction(ctx: AuditContext) -> str | None:
+    """Pick the ban mechanism that really exists on this host (nft first, then iptables)."""
+    for tool, action in (("nft", "nftables"), ("iptables", "iptables")):
+        if (
+            tool_present(ctx, tool)
+            and ctx.path(f"/etc/fail2ban/action.d/{action}-multiport.conf").is_file()
+        ):
+            return action
+    return None
+
+
+def jail_text(ctx: AuditContext, check_id: str, port: str, ip: str | None) -> str:
+    lines = [f"# Managed by ReviveGuard ({check_id}). Remove this file to undo.", "[DEFAULT]"]
+    if ip:
+        lines.append(f"ignoreip = 127.0.0.1/8 ::1 {ip}")
+    action = choose_banaction(ctx)
+    if action:
+        lines += [f"banaction = {action}-multiport", f"banaction_allports = {action}-allports"]
+    lines += ["", f"[{JAIL}]", "enabled = true", f"port = {port}"]
+    if needs_journal_backend(ctx):
+        lines.append("backend = systemd")
+    return "\n".join(lines) + "\n"
+
+
+def activate_fail2ban(ctx: AuditContext) -> bool:
+    """Reload a running fail2ban; start (and enable) a stopped one. Never a blind restart."""
+    if ctx.runner(["systemctl", "is-active", "--quiet", "fail2ban"]).ok:
+        return ctx.runner(["fail2ban-client", "reload"]).ok
+    return ctx.runner(["systemctl", "enable", "--now", "fail2ban"], timeout=120).ok
+
+
+IGNOREIP_DROPIN = "reviveguard-base.local"
 
 
 def client_ip(ctx: AuditContext) -> str | None:
@@ -70,36 +107,43 @@ def client_ip(ctx: AuditContext) -> str | None:
 
 
 def plan_install(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
-    """F2B-001: install fail2ban when absent, protecting the current client address."""
-    if not ctx.runner(["fail2ban-client", "--version"]).missing:
-        return Manual("fix.reason.fail2ban_inactive")
+    """F2B-001: install/start fail2ban with everything it needs to actually work.
+
+    Handles a bare image: journald backend (python3-systemd) when there is no auth.log, a
+    ban mechanism (iptables) when no firewall tool exists, and a stopped, installed fail2ban.
+    The current SSH client address is whitelisted so the administrator is not banned.
+    """
     if not packages.apt_available(ctx):
         return Manual("fix.reason.no_apt")
     ip = client_ip(ctx)
+    port = ssh_port(ctx)
     path = ctx.path(f"{JAIL_DIR}/{IGNOREIP_DROPIN}")
-    text = (
-        f"# Managed by ReviveGuard ({result.check_id}). Remove this file to undo.\n"
-        f"[DEFAULT]\nignoreip = 127.0.0.1/8 ::1 {ip}\n"
-    )
+    installed = not ctx.runner(["fail2ban-client", "--version"]).missing
+    wanted = [] if installed else ["fail2ban"]
+    if needs_journal_backend(ctx) and not packages.is_installed(ctx, "python3-systemd"):
+        wanted.append("python3-systemd")
+    if not (tool_present(ctx, "nft") or tool_present(ctx, "iptables")):
+        wanted.append("iptables")
 
     def apply() -> None:
-        error = packages.install(ctx, ["fail2ban"])
-        if error:
-            raise RuntimeError(error)
-        if ip:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            write_file_atomic(path, text, 0o644)
+        if wanted:
+            error = packages.install(ctx, wanted)
+            if error:
+                raise RuntimeError(error)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_file_atomic(path, jail_text(ctx, result.check_id, port, ip), 0o644)
 
+    what = ", ".join(wanted) if wanted else "nothing new"
     return FixSpec(
         fix_id="fail2ban.install",
         check_id=result.check_id,
-        description="Install fail2ban" + (f" and whitelist the current client {ip}" if ip else ""),
-        files=[path] if ip else [],
+        description=f"Set up fail2ban (packages: {what}; sshd jail, whitelist {ip or 'none'})",
+        files=[path],
         apply=apply,
         validate=lambda: _config_error(ctx),
-        activate=(lambda: ctx.runner(["fail2ban-client", "reload"]).ok) if ip else None,
+        activate=lambda: activate_fail2ban(ctx),
         change_key="fix.fail2ban.install",
-        change_args={"ip": ip or "-"},
-        service_key="fix.service.reload_fail2ban" if ip else None,
-        reversible=bool(ip),  # the package itself is never uninstalled
+        change_args={"ip": ip or "-", "packages": what},
+        service_key="fix.service.start_fail2ban",
+        packages=wanted,
     )

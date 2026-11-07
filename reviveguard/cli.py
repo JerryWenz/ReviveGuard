@@ -264,6 +264,9 @@ def cmd_fix(t, store: Store, ctx: AuditContext, config: Config, args) -> int:
             print(t(key, id=outcome.op_id), file=sys.stderr)
         elif outcome.op_id:
             print(t("fix.result.not_reversible", id=outcome.op_id), file=sys.stderr)
+        if plan.packages:
+            names = ", ".join(plan.packages)
+            print(t("fix.result.packages_remain", packages=names), file=sys.stderr)
     print("\n" + t("fix.summary", **counts))
     if counts["applied"]:
         print(t("fix.rerun_hint"))

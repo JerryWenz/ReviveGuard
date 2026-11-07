@@ -11,7 +11,7 @@ import re
 
 from reviveguard.context import AuditContext
 
-INSTALLABLE = frozenset({"ufw", "fail2ban", "unattended-upgrades"})
+INSTALLABLE = frozenset({"ufw", "fail2ban", "unattended-upgrades", "python3-systemd", "iptables"})
 PKG_NAME = re.compile(r"^[a-z0-9][a-z0-9+.\-]*$")
 PACKAGE_TIMEOUT = 1800  # seconds; upgrades can take a while
 # Non-interactive, keep existing config files, never auto-restart services (needrestart).
