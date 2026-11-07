@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from reviveguard.backup import FileRecord, sha256_file
-from reviveguard.checks import REGISTRY
+from reviveguard.checks import PREFIXES, REGISTRY
 from reviveguard.context import AuditContext
 from reviveguard.models import Status
 
@@ -21,7 +21,7 @@ class VerificationResult:
 
 def verify_check_passes(ctx: AuditContext, check_id: str) -> VerificationResult:
     """Re-run the owning check module and require ``check_id`` to report OK."""
-    category = check_id.split("-", 1)[0].lower()
+    category = PREFIXES.get(check_id.split("-", 1)[0].upper(), "")
     module = REGISTRY.get(category)
     if module is None:
         return VerificationResult(False, f"no check module for {check_id}")

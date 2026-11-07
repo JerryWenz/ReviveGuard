@@ -380,5 +380,5 @@ def test_write_file_atomic_cleans_up_on_failure(tmp_path, monkeypatch):
 
 
 def test_registry_covers_all_ssh_checks():
-    assert set(REGISTRY) == {f"SSH-00{i}" for i in range(1, 6)}
+    assert {k for k in REGISTRY if k.startswith("SSH-")} == {f"SSH-00{i}" for i in range(1, 6)}
     assert callable(fixes.reload_ssh) and write_sshd_config

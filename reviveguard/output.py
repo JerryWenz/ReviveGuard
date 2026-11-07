@@ -7,6 +7,7 @@ import socket
 
 from reviveguard import __version__
 from reviveguard.context import AuditContext
+from reviveguard.fixes import AUTOMATIC
 from reviveguard.i18n import Translator
 from reviveguard.models import CheckResult, Severity, Status
 from reviveguard.scanner import AuditReport
@@ -73,6 +74,7 @@ def render_json(t: Translator, ctx: AuditContext, report: AuditReport, lang: str
         data["title"] = t(r.title_key)
         data["description"] = t(r.description_key)
         data["remediation"] = t(r.remediation_key)
+        data["auto_fix_supported"] = r.check_id in AUTOMATIC  # a fix exists; it may still refuse
         results.append(data)
     payload = {
         "reviveguard_version": __version__,
