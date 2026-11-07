@@ -26,6 +26,28 @@ class Item:
     plan: FixSpec | Manual
 
 
+CONFIRM_SECONDS = 120
+
+
+def read_confirmation(timeout: int) -> bool:
+    """Wait up to ``timeout`` seconds for the user to type 'ok'/'y' (no terminal: False)."""
+    import select
+
+    try:
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        line = sys.stdin.readline() if ready else ""
+    except (OSError, ValueError):
+        return False
+    return line.strip().lower() in ("ok", "y", "yes")
+
+
+def live_confirm(con: Console, spec: FixSpec) -> bool:
+    """Commit-confirm: the change stays only if the user confirms in time."""
+    con.say(f"  {con.style.bold(con.t(spec.confirm_key or '', **spec.confirm_args))}")
+    con.say(f"  {con.t('fix.confirm.waiting', seconds=CONFIRM_SECONDS)}")
+    return read_confirmation(CONFIRM_SECONDS)
+
+
 class Console:
     """Printing with markup highlighting and a prompt that treats EOF as 'no'."""
 
@@ -109,7 +131,7 @@ def apply_item(con: Console, store: Store, ctx: AuditContext, item: Item) -> boo
     t, s = con.t, con.style
     spec = item.plan
     assert isinstance(spec, FixSpec)
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda sp: live_confirm(con, sp))
     if outcome.status == "applied":
         con.say(f"  {s.paint('OK', 'green', 'bold')} {t('fix.result.applied', id=outcome.op_id)}")
         if spec.next_key:

@@ -54,6 +54,16 @@ interfaces between minor releases.
 - `reviveguard report [--format markdown|json] [--output FILE]`: findings by severity, applied fixes with
   verification, outstanding risks, secrets redacted, deliberately no numeric score.
 
+- SSH hardening `SSH-006`..`SSH-009` (X11, MaxAuthTries, LoginGraceTime, weak algorithms) and a
+  two-phase SSH port change `SSH-010`/`SSH-011` (new port added while 22 stays; 22 closed only after a
+  login through the new port; refuses with socket activation, `Port` in sshd_config, or a blocking firewall).
+- Accounts `USR-001`..`USR-003` and `reviveguard admin-user` (key-only sudo administrator, strict key validation,
+  sudoers validated with `visudo -cf`); the wizard offers it and tells you how to continue after a test login.
+- Safe ufw enable (`FW-001` when ufw is installed but off): default deny, keeps every currently reachable service,
+  blocks risky exposed ports, and needs a live confirmation within 120 s or switches the firewall off again.
+- Docker checks `DOC-001`..`DOC-008` (socket, docker group, exposed API, privileged/host-network/capabilities/
+  sensitive mounts/root containers). Findings only.
+
 ### Changed
 - Fail2ban setup now works on bare images (found on a real Ubuntu 22.04 server): journald backend
   (`python3-systemd`) when there is no `/var/log/auth.log`, `iptables` + matching `banaction` when no

@@ -58,8 +58,8 @@ def test_ufw_install_failure_is_reported(make_ctx, store):
     assert outcome.status == "apply_failed" and "ufw" not in host.installed
 
 
-def test_firewall_fix_is_manual_when_a_tool_exists(make_ctx):
-    runner = FakeRunner(dict([cr(["ufw", "status", "verbose"], "Status: inactive\n")]))
+def test_firewall_fix_is_manual_when_another_tool_is_in_use(make_ctx):
+    runner = FakeRunner(dict([cr(["iptables", "-S"], "-P INPUT DROP\n-A INPUT -i lo -j ACCEPT\n")]))
     ctx = make_ctx(runner=runner)
     plan = REGISTRY["FW-001"](ctx, fw_failure(ctx))
     assert isinstance(plan, Manual) and plan.reason_key == "fix.reason.firewall_manual"
