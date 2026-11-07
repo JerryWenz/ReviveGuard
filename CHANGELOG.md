@@ -27,9 +27,16 @@ interfaces between minor releases.
 - SSH lockout prevention (`ssh_access.py`): fixes that could remove access are refused
   (manual remediation) unless a working alternative is verified.
 
+- Firewall checks `FW-001`..`FW-004` (UFW, nftables, iptables, firewalld): active, default
+  incoming policy, dangerous rules (exposed database/admin ports, accept-all), ufw+firewalld conflict.
+  Findings are **manual-only**: ReviveGuard never enables, changes or flushes firewall rules.
+- Fail2ban checks `F2B-001`..`F2B-005`: running, configuration test, sshd jail, log source,
+  ban settings. Automatic fix for `F2B-002` (drop-in enabling the sshd jail, `reload` not restart).
+- Guide for testing on a real server (`docs/vps-testing.ru.md`).
+
 ### Changed
 - sshd configuration values keep their original case (user names and paths are case-sensitive).
 
 ### Not implemented yet
-`fix --auto`, reports, and all check modules except SSH. Fixes exist only for SSH and have
-not been exercised against a real `sshd` yet (see README, Known limitations).
+`fix --auto`, reports, and the Docker, updates, permissions, services and sysctl modules.
+Fixes (SSH, fail2ban) have not been exercised against real services yet (see README).

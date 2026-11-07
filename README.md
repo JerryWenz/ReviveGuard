@@ -10,6 +10,9 @@ Lightweight Linux server security auditor with (planned) controlled auto-remedia
 - `reviveguard audit` — read-only; never modifies the system.
 - SSH checks `SSH-001`..`SSH-005`: root login, password authentication, empty passwords,
   public key authentication, `sshd_config` ownership/permissions.
+- Firewall checks `FW-001`..`FW-004` (UFW, nftables, iptables, firewalld) — findings only;
+  firewall changes are always manual. Fail2ban checks `F2B-001`..`F2B-005`; the missing SSH jail
+  (`F2B-002`) can be enabled by `fix`. Both modules need root to read their state.
 - `reviveguard fix [--category ssh] [--check SSH-002]` — interactive fixes for the SSH findings
   (needs root). Every fix is explained, backed up, confirmed by you, validated, verified and
   recorded; failures restore the original files automatically.
@@ -19,8 +22,8 @@ Lightweight Linux server security auditor with (planned) controlled auto-remedia
 
 ## Not implemented yet
 
-`fix --auto`, `report`, `config set`, and the firewall, fail2ban, Docker,
-updates, permissions, services and sysctl checks. See the roadmap below.
+`fix --auto`, `report`, `config set`, and the Docker, updates, permissions, services and
+sysctl checks. See the roadmap below.
 
 ## Requirements and tested platforms
 
@@ -91,8 +94,12 @@ sensitive files (e.g. `/etc/shadow`) are stored with mode 0600 inside a 0700 dir
 
 ## Known limitations
 
-- SSH fixes are covered by tests with a faked system; they have **not** been run against a real
-  `sshd`/`systemd` yet. Try them on a non-critical machine first.
+- SSH and fail2ban fixes are covered by tests with a faked system; they have **not** been run
+  against real `sshd`/`fail2ban`/`systemd` yet. See [docs/vps-testing.ru.md](docs/vps-testing.ru.md).
+- Ubuntu 22.04 ships Python 3.10; ReviveGuard needs 3.11+ (Debian 12 and Ubuntu 24.04 are fine).
+- Firewall checks read the rule sets as-is; conflicts are only detected for ufw + firewalld.
+  Without an active firewall the policy/rule checks are not reported.
+-  Try them on a non-critical machine first.
 - Directives set in `sshd_config` before its `Include` line, or a missing `Include`, make the fix
   manual. `fix --auto` is not implemented.
 

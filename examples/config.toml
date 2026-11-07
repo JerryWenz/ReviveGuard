@@ -6,8 +6,8 @@
 
 [audit]
 ssh = true
-firewall = true     # not implemented yet; accepted and ignored
-fail2ban = true     # not implemented yet
+firewall = true
+fail2ban = true
 docker = true       # not implemented yet
 updates = true      # not implemented yet
 permissions = true  # not implemented yet
