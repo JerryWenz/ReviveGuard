@@ -89,6 +89,8 @@ def _dropin_spec(
     disruptive: bool,
     service: bool = True,
     extra_lines: list[tuple[str, str]] | None = None,
+    confirm_key: str | None = None,
+    confirm_args: dict[str, str] | None = None,
 ) -> FixSpec:
     """Drop-in with ``key value`` (plus optional extra directives) for one fix."""
     directives = [(key, value), *(extra_lines or [])]
@@ -112,7 +114,8 @@ def _dropin_spec(
         reload_service="ssh" if service else None,
         # Commit-confirm: a change that can narrow access stays only if the administrator
         # proves, from a NEW session, that they can still get in.
-        confirm_key="fix.confirm.ssh" if disruptive and service else None,
+        confirm_key=confirm_key or ("fix.confirm.ssh" if disruptive and service else None),
+        confirm_args=confirm_args or {},
     )
 
 
@@ -150,6 +153,24 @@ def plan_root_login(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
 
     if remote and user is None:
         return Manual("fix.reason.cannot_determine_user")
+    names = {a.name for a in others}
+    password_admins = sorted(a.name for a in others if password_auth and a.has_password)
+
+    def root_off() -> FixSpec:
+        # The live confirmation asks for a login as the administrator (not root), which is
+        # exactly the path that must keep working once root is switched off.
+        return _dropin_spec(
+            ctx,
+            result,
+            "PermitRootLogin",
+            "no",
+            True,
+            confirm_key="fix.confirm.ssh_root",
+            confirm_args={"admins": ", ".join(sorted(names))},
+        )
+
+    if password_admins and (not remote or user == "root" or user in names):
+        return root_off()  # a password administrator exists: no key proof is needed
     proof = _needs_proof(ctx)
     if proof:
         return proof
@@ -158,10 +179,10 @@ def plan_root_login(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
         if not root_key:
             return Manual("fix.reason.root_session_no_key")
         return _dropin_spec(ctx, result, "PermitRootLogin", "prohibit-password", True)
-    if remote and user not in {a.name for a in others}:
+    if remote and user not in names:
         return Manual("fix.reason.no_key_for_current_user", {"user": str(user)})
     if others:
-        return _dropin_spec(ctx, result, "PermitRootLogin", "no", True)
+        return root_off()
     if root_key:
         return _dropin_spec(ctx, result, "PermitRootLogin", "prohibit-password", True)
     return Manual("fix.reason.no_admin_access")

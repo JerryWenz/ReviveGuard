@@ -217,7 +217,7 @@ def test_accounts_checks(make_ctx, fake_root):
 def test_accounts_skip_password_checks_without_root(make_ctx, fake_root):
     build_host(fake_root, {"root": {"uid": 0}}, SSHD_MAIN)
     res = accounts.run(make_ctx(runner=ssh_runner(), root=False))
-    assert {r.check_id for r in res} == {"USR-001", "USR-003", "USR-000"}
+    assert {r.check_id for r in res} == {"USR-001", "USR-003", "USR-004", "USR-000"}
 
 
 # ---------------- CLI ----------------

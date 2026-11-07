@@ -13,6 +13,7 @@ from pathlib import Path
 
 from reviveguard.context import AuditContext
 from reviveguard.models import CheckResult, Severity, Status
+from reviveguard.ssh_access import authorized_keys_problems
 
 SSHD_CONFIG = "/etc/ssh/sshd_config"
 # OpenSSH defaults (Debian/Ubuntu ship these unless the config overrides them).
@@ -266,6 +267,17 @@ def run(ctx: AuditContext) -> list[CheckResult]:
         weak = weak_algorithms(cfg)
         evidence = [f"{k}: {', '.join(v)}" for k, v in weak.items()] or ["no weak algorithms"]
         results.append(_result("SSH-009", "weak_algorithms", Severity.MEDIUM, bool(weak), evidence))
+    keys_problems = authorized_keys_problems(ctx, cfg)
+    results.append(
+        _result(
+            "SSH-012",
+            "authkeys_perms",
+            Severity.MEDIUM,
+            bool(keys_problems),
+            keys_problems or ["authorized_keys files and their directories look correct"],
+            restart=False,
+        )
+    )
     perms = _permissions_check(ctx)
     if perms is not None:
         results.append(perms)

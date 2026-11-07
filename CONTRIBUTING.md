@@ -30,8 +30,23 @@ Tests must never touch the real operating system: use the fixtures in
 
 ## Adding a fix
 
-Fixes are not implemented yet. They will require backup, validation before apply,
-verification after apply, and a documented rollback story. See the roadmap in the README.
+A fix is a *planner* `plan(ctx, result) -> FixSpec | Manual` registered in
+`reviveguard/fixes/__init__.py` under the check ID. The engine (`remediation.run_fix`) does the rest:
+backup -> `apply` -> `validate` -> `activate` -> `verify` -> optional live confirmation -> record,
+and restores the files automatically if any step fails or is interrupted.
+
+Rules a fix must follow:
+
+1. Return `Manual(reason_key)` whenever safety cannot be shown (missing tool, unclear state, lockout risk).
+   Prefer a drop-in file over editing a main config; list **every** file you may change in `files`.
+2. Validate before activating (`sshd -t`, `fail2ban-client -t`, `visudo -cf`) and **reload, never restart**.
+3. Anything that can narrow access or affect running services sets `disruptive=True`; access changes also set
+   `confirm_key` (live "type ok from a NEW terminal" confirmation) and `reload_service`.
+4. Package operations go through `reviveguard/packages.py` (allow-listed, never remove); list them in `packages`
+   and set `reversible=False` unless a file is also changed. Never reboot or restart services.
+5. Never write secrets into evidence, descriptions or history. Add i18n keys for `change_key`, reasons and next steps.
+6. Tests: success, refusal (`Manual`), failure after apply (must revert), interruption, and an unsafe-state case.
+   Use the fake host helpers in `tests/` (`build_host`, `ssh_runner`); never touch the real system.
 
 ## Adding a translation
 

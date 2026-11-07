@@ -131,10 +131,11 @@ def plan_admin_user(
         change_key="fix.access.admin_user",
         change_args={
             "name": username,
-            "fingerprint": fingerprint,
+            "fingerprint": fingerprint if key_line else "(none yet)",
             "sudo": "NOPASSWD" if nopasswd else "password",
         },
         service_key="fix.access.user_stays",
+        reversible=bool(files),  # no files (no key, sudo with password): history only
         verify=None if key_line else exists,  # without a key USR-001 cannot pass yet
         next_key=next_key,
         next_args={"name": username},
