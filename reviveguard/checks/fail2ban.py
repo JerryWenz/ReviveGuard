@@ -28,8 +28,8 @@ def ssh_server_present(ctx: AuditContext) -> bool:
 
 def ssh_port(ctx: AuditContext) -> str:
     found = effective_config(ctx)
-    port = (found[0].get("port", "22") if found else "22").split()[0]
-    return port if port.isdigit() else "22"
+    ports = [p for p in (found[0].get("port", "22") if found else "22").split() if p.isdigit()]
+    return ",".join(ports) or "22"
 
 
 def _result(

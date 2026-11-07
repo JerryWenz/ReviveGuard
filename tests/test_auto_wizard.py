@@ -45,7 +45,7 @@ def test_auto_yes_applies_only_eligible_and_explains_the_rest(
     assert dropin(fake_root, "pubkeyauthentication").exists()  # MEDIUM, safe -> applied
     assert not dropin(fake_root, "permitemptypasswords").exists()  # CRITICAL -> needs policy
     assert not dropin(fake_root, "passwordauthentication").exists()  # disruptive -> not automatic
-    assert "Reviewed set of fixes:" in out and "[1/1]" in out
+    assert "Reviewed set of fixes:" in out and "[1/" in out
     assert "allow_critical = true" in out  # SSH-003 (CRITICAL) waits for a policy decision
     assert "public key authentication is disabled" in out  # SSH-002 is manual, with the reason
 
@@ -102,7 +102,7 @@ def test_auto_stops_after_first_failure(make_ctx, fake_root, capsys, monkeypatch
     rc, out, err = run(args, ctx, capsys, monkeypatch, tmp_path)
     assert rc == 1 and "Stopped after a failure" in err
     assert not list((fake_root / "etc/ssh/sshd_config.d").iterdir())  # failed fix was reverted
-    assert "[2/2]" not in out  # nothing ran after the first failure
+    assert "[2/" not in out  # nothing ran after the first failure
 
 
 def test_wizard_runs_all_steps_and_saves_report(make_ctx, fake_root, capsys, monkeypatch, tmp_path):

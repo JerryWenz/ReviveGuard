@@ -60,7 +60,8 @@ def test_secure_file_config(make_ctx, fake_root):
     write_sshd_config(
         fake_root,
         "PermitRootLogin no\nPasswordAuthentication no\n"
-        "PermitEmptyPasswords no\nPubkeyAuthentication yes\n",
+        "PermitEmptyPasswords no\nPubkeyAuthentication yes\n"
+        "X11Forwarding no\nMaxAuthTries 3\nLoginGraceTime 30\nPort 49222\n",
     )
     results = ssh.run(make_ctx())
     assert all(r.status is Status.OK for r in results)
@@ -148,3 +149,52 @@ def test_permission_error_on_config_is_skipped_not_crash(make_ctx, fake_root):
         ctx = make_ctx()
     assert [r.status for r in ssh.run(ctx)] == [Status.SKIPPED]
     path.chmod(0o600)
+
+
+def test_parse_seconds():
+    assert ssh.parse_seconds("120") == 120 and ssh.parse_seconds("2m") == 120
+    assert ssh.parse_seconds("1h30m") == 5400 and ssh.parse_seconds("") is None
+    assert ssh.parse_seconds("abc") is None
+
+
+def test_hardening_defaults_are_flagged(make_ctx, fake_root):
+    write_sshd_config(fake_root, "X11Forwarding yes\n")
+    res = by_id(ssh.run(make_ctx()))
+    for check_id in ("SSH-006", "SSH-007", "SSH-008", "SSH-010"):
+        assert res[check_id].status is Status.FAIL, check_id
+    assert "SSH-009" not in res and "SSH-011" not in res  # need sshd -T / two ports
+
+
+def test_grace_time_with_units_and_zero(make_ctx, fake_root):
+    write_sshd_config(fake_root, "LoginGraceTime 30s\n")
+    assert by_id(ssh.run(make_ctx()))["SSH-008"].status is Status.OK
+    write_sshd_config(fake_root, "LoginGraceTime 0\n")
+    assert by_id(ssh.run(make_ctx()))["SSH-008"].status is Status.FAIL
+
+
+def test_custom_port_is_not_default_and_migration_is_reported(make_ctx, fake_root):
+    write_sshd_config(fake_root, "Port 22\nPort 49222\n")
+    res = by_id(ssh.run(make_ctx()))
+    assert res["SSH-010"].status is Status.OK
+    assert res["SSH-011"].status is Status.FAIL and "49222" in res["SSH-011"].evidence[0]
+
+
+SSHD_T_WEAK = (
+    "ciphers aes256-gcm@openssh.com,aes128-cbc,3des-cbc\n"
+    "macs hmac-sha2-256,hmac-md5\n"
+    "kexalgorithms curve25519-sha256,diffie-hellman-group14-sha1\n"
+    "port 22\n"
+)
+
+
+def test_weak_algorithms_only_from_effective_config(make_ctx, fake_root):
+    write_sshd_config(fake_root, "")
+    runner = FakeRunner({("sshd", "-T"): CommandResult(("sshd", "-T"), 0, SSHD_T_WEAK)})
+    r = by_id(ssh.run(make_ctx(runner=runner)))["SSH-009"]
+    assert r.status is Status.FAIL and r.severity is Severity.MEDIUM
+    text = " ".join(r.evidence)
+    assert "aes128-cbc" in text and "3des-cbc" in text and "hmac-md5" in text
+    assert "diffie-hellman-group14-sha1" in text and "aes256-gcm" not in text
+    good = "ciphers aes256-gcm@openssh.com\nmacs hmac-sha2-256\nkexalgorithms curve25519-sha256\n"
+    runner = FakeRunner({("sshd", "-T"): CommandResult(("sshd", "-T"), 0, good)})
+    assert by_id(ssh.run(make_ctx(runner=runner)))["SSH-009"].status is Status.OK

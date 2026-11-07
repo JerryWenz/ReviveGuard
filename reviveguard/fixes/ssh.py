@@ -8,10 +8,16 @@ The new configuration is validated with ``sshd -t`` and the service is *reloaded
 
 from __future__ import annotations
 
+import hashlib
 import os
+import socket
+import time
 from pathlib import Path
 
-from reviveguard.checks.ssh import SSHD_CONFIG, effective_config
+from reviveguard.checks.firewall import collect as collect_firewall
+from reviveguard.checks.firewall import is_active as firewall_active
+from reviveguard.checks.services import parse_ss
+from reviveguard.checks.ssh import SSHD_CONFIG, effective_config, ports_of, weak_algorithms
 from reviveguard.context import AuditContext
 from reviveguard.models import CheckResult
 from reviveguard.remediation import FixSpec, Manual, write_file_atomic
@@ -81,22 +87,25 @@ def _dropin_spec(
     value: str,
     disruptive: bool,
     service: bool = True,
+    extra_lines: list[tuple[str, str]] | None = None,
 ) -> FixSpec:
+    """Drop-in with ``key value`` (plus optional extra directives) for one fix."""
+    directives = [(key, value), *(extra_lines or [])]
     name = f"00-reviveguard-{key.lower()}.conf"
     path = ctx.path(f"{DROPIN_DIR}/{name}")
-    text = (
-        f"# Managed by ReviveGuard ({result.check_id}). Remove this file to undo.\n{key} {value}\n"
-    )
+    header = f"# Managed by ReviveGuard ({result.check_id}). Remove this file to undo."
+    text = header + "\n" + "".join(f"{k} {v}\n" for k, v in directives)
+    shown = "; ".join(f"{k} {v}" for k, v in directives)
     return FixSpec(
-        fix_id=f"ssh.{key.lower()}.{value}",
+        fix_id=f"ssh.{key.lower()}.{value}"[:80],
         check_id=result.check_id,
-        description=f"Set {key} to {value} via drop-in {DROPIN_DIR}/{name}",
+        description=f"Set {shown} via drop-in {DROPIN_DIR}/{name}",
         files=[path],
         apply=lambda: write_file_atomic(path, text, 0o644),
         validate=lambda: _validate(ctx),
         activate=(lambda: reload_ssh(ctx)) if service else None,
         change_key="fix.ssh.set_directive",
-        change_args={"path": f"{DROPIN_DIR}/{name}", "directive": f"{key} {value}"},
+        change_args={"path": f"{DROPIN_DIR}/{name}", "directive": shown},
         service_key="fix.service.reload_ssh" if service else None,
         disruptive=disruptive,
     )
@@ -192,3 +201,191 @@ def plan_config_perms(ctx: AuditContext, result: CheckResult) -> FixSpec | Manua
         change_key="fix.ssh.chmod",
         change_args={"path": SSHD_CONFIG},
     )
+
+
+def plan_x11(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
+    _, refusal = _precheck(ctx, "x11forwarding")
+    return refusal or _dropin_spec(ctx, result, "X11Forwarding", "no", False)
+
+
+def plan_max_auth_tries(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
+    _, refusal = _precheck(ctx, "maxauthtries")
+    return refusal or _dropin_spec(ctx, result, "MaxAuthTries", "4", False)
+
+
+def plan_grace_time(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
+    _, refusal = _precheck(ctx, "logingracetime")
+    return refusal or _dropin_spec(ctx, result, "LoginGraceTime", "30", False)
+
+
+def plan_weak_algorithms(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
+    cfg, refusal = _precheck(ctx, "ciphers")
+    if refusal:
+        return refusal
+    weak = weak_algorithms(cfg)
+    if not weak:
+        return Manual("fix.reason.nothing_to_fix")
+    names = {"ciphers": "Ciphers", "macs": "MACs", "kexalgorithms": "KexAlgorithms"}
+    lines = [(names[k], "-" + ",".join(v)) for k, v in weak.items()]  # '-' removes from defaults
+    first, rest = lines[0], lines[1:]
+    # Disruptive: very old clients that only speak these algorithms would be refused.
+    return _dropin_spec(ctx, result, first[0], first[1], True, extra_lines=rest)
+
+
+# ---------------- changing the SSH port (two phases) ----------------
+
+PORT_DROPIN = "00-reviveguard-port.conf"
+JAIL_PORT_FILE = "/etc/fail2ban/jail.d/reviveguard-sshd-port.local"
+
+
+def stable_port(ctx: AuditContext, taken: set[int]) -> int:
+    """A reproducible high port derived from the hostname (re-runs propose the same one)."""
+    seed = int(hashlib.sha256(socket.gethostname().encode()).hexdigest(), 16)
+    port = 20000 + seed % 40000
+    while port in taken:
+        port = 20000 + (port - 20000 + 1) % 40000
+    return port
+
+
+def listening_ports(ctx: AuditContext) -> set[int]:
+    proc = ctx.runner(["ss", "-H", "-tuln"])
+    return {x.port for x in parse_ss(proc.stdout)} if proc.ok else set()
+
+
+def socket_activated(ctx: AuditContext) -> bool:
+    """With ssh.socket, ports come from the socket unit, not from sshd_config."""
+    return ctx.runner(["systemctl", "is-active", "--quiet", "ssh.socket"]).ok
+
+
+def main_config_sets_port(ctx: AuditContext) -> bool:
+    for raw in (ctx.read_text(SSHD_CONFIG) or "").splitlines():
+        parts = raw.split("#", 1)[0].split()
+        if parts and parts[0].lower().partition("=")[0] == "port":
+            return True
+    return False
+
+
+def _firewall_blocks(ctx: AuditContext, port: int) -> bool:
+    """True if an active firewall would not allow ``port`` (so the new port must not be added)."""
+    state = collect_firewall(ctx)
+    if not firewall_active(state):
+        return False
+    if state.ufw_active:
+        return not any(
+            rule_to.split()[0].split("/")[0] == str(port) and "ALLOW" in action.upper()
+            for rule_to, action, _ in state.ufw_rules
+        )
+    return True  # nft/iptables/firewalld: rules cannot be verified generically
+
+
+def _wait_listening(ctx: AuditContext, port: int, present: bool = True) -> bool:
+    for _ in range(10):
+        if (port in listening_ports(ctx)) == present:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def _port_files(ctx: AuditContext, ports: list[str]) -> tuple[list[Path], dict, str]:
+    """sshd drop-in (+ fail2ban jail port drop-in when fail2ban is installed)."""
+    sshd_path = ctx.path(f"{DROPIN_DIR}/{PORT_DROPIN}")
+    header = "# Managed by ReviveGuard (SSH port). Remove this file to undo."
+    texts = {sshd_path: header + "\n" + "".join(f"Port {p}\n" for p in ports)}
+    jail_dir = ctx.path("/etc/fail2ban/jail.d")
+    if jail_dir.is_dir() and not ctx.runner(["fail2ban-client", "--version"]).missing:
+        jail = ctx.path(JAIL_PORT_FILE)
+        texts[jail] = f"{header}\n[sshd]\nport = {','.join(ports)}\n"
+    return list(texts), texts, ",".join(ports)
+
+
+def _port_spec(
+    ctx: AuditContext,
+    result: CheckResult,
+    ports: list[str],
+    fix_id: str,
+    must_listen: str,
+    must_not_listen: str | None,
+    next_key: str,
+) -> FixSpec:
+    files, texts, shown = _port_files(ctx, ports)
+
+    def apply() -> None:
+        for path, text in texts.items():
+            write_file_atomic(path, text, 0o644)
+
+    def activate() -> bool:
+        ok = reload_ssh(ctx)
+        if ok and len(files) > 1:
+            ctx.runner(["fail2ban-client", "reload"])
+        return ok
+
+    def verify() -> str | None:
+        if not _wait_listening(ctx, int(must_listen)):
+            return f"sshd is not listening on port {must_listen}"
+        if must_not_listen and not _wait_listening(ctx, int(must_not_listen), present=False):
+            return f"sshd still listens on port {must_not_listen}"
+        return None
+
+    return FixSpec(
+        fix_id=fix_id,
+        check_id=result.check_id,
+        description=f"Set SSH ports to {shown}",
+        files=files,
+        apply=apply,
+        validate=lambda: _validate(ctx),
+        activate=activate,
+        change_key="fix.ssh.ports",
+        change_args={"ports": shown},
+        service_key="fix.service.reload_ssh",
+        disruptive=True,
+        verify=verify,
+        next_key=next_key,
+        next_args={"port": must_listen, "old": must_not_listen or "22"},
+    )
+
+
+def plan_port_add(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
+    """Phase 1: listen on a new port *and* keep the current one until the user confirms."""
+    cfg, refusal = _precheck(ctx, "port")
+    if refusal:
+        return refusal
+    if socket_activated(ctx):
+        return Manual("fix.reason.ssh_socket")
+    if main_config_sets_port(ctx):
+        return Manual("fix.reason.port_in_main")
+    current = ports_of(cfg)
+    port = stable_port(ctx, listening_ports(ctx) | {int(p) for p in current})
+    if _firewall_blocks(ctx, port):
+        return Manual("fix.reason.firewall_open_port", {"port": str(port)})
+    return _port_spec(
+        ctx,
+        result,
+        [*current, str(port)],
+        f"ssh.port.add.{port}",
+        str(port),
+        None,
+        "fix.next.port_added",
+    )
+
+
+def plan_port_finish(ctx: AuditContext, result: CheckResult) -> FixSpec | Manual:
+    """Phase 2: drop port 22 only after a login through the new port was verified."""
+    cfg, refusal = _precheck(ctx, "port")
+    if refusal:
+        return refusal
+    if socket_activated(ctx):
+        return Manual("fix.reason.ssh_socket")
+    if main_config_sets_port(ctx):
+        return Manual("fix.reason.port_in_main")
+    ports = ports_of(cfg)
+    keep = [p for p in ports if p != "22"]
+    if not keep:
+        return Manual("fix.reason.nothing_to_fix")
+    if is_remote_session(ctx):
+        connected = (ctx.env.get("SSH_CONNECTION") or "").split()
+        server_port = connected[3] if len(connected) >= 4 else ""
+        if server_port not in keep:
+            return Manual("fix.reason.reconnect_new_port", {"port": keep[0]})
+    if int(keep[0]) not in listening_ports(ctx):
+        return Manual("fix.reason.port_not_listening", {"port": keep[0]})
+    return _port_spec(ctx, result, keep, "ssh.port.finish", keep[0], "22", "fix.next.port_finished")
