@@ -155,3 +155,63 @@ def test_rollback_does_not_reload_an_invalid_config(
     assert cli.main(args, ctx=make_ctx(runner=runner)) == 1
     assert ["systemctl", "reload", "ssh"] not in runner.calls
     assert "does not validate" in capsys.readouterr().err
+
+
+# ---------- commit-confirm for SSH access changes ----------
+
+
+def test_ssh_change_is_reverted_and_reloaded_when_the_new_login_is_not_confirmed(
+    make_ctx, fake_root, tmp_path
+):
+    """The incident, second line of defence: no live confirmation -> automatic revert."""
+    from reviveguard.remediation import run_fix
+
+    ctx = root_host(make_ctx, fake_root, KEY_LOG)
+    spec = REGISTRY["SSH-002"](ctx, failing(ctx, "SSH-002"))
+    assert isinstance(spec, FixSpec) and spec.confirm_key == "fix.confirm.ssh"
+    runner = ctx.runner
+    store = Store(tmp_path / "state")
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: False)
+    dropin = fake_root / "etc/ssh/sshd_config.d/00-reviveguard-passwordauthentication.conf"
+    assert outcome.status == "confirmation_failed" and outcome.reverted and outcome.revert_ok
+    assert not dropin.exists()
+    assert runner.calls.count(["systemctl", "reload", "ssh"]) == 2  # apply, then restore
+
+
+def test_ssh_change_stays_when_confirmed(make_ctx, fake_root, tmp_path):
+    from reviveguard.remediation import run_fix
+
+    ctx = root_host(make_ctx, fake_root, KEY_LOG)
+    spec = REGISTRY["SSH-002"](ctx, failing(ctx, "SSH-002"))
+    outcome = run_fix(Store(tmp_path / "state"), ctx, spec, confirm=lambda s: True)
+    assert outcome.status == "applied"
+
+
+def test_every_access_narrowing_ssh_fix_requires_live_confirmation(make_ctx, fake_root):
+    ctx = root_host(make_ctx, fake_root, KEY_LOG)
+    for check_id in ("SSH-001", "SSH-002"):
+        spec = REGISTRY[check_id](ctx, failing(ctx, check_id))
+        assert isinstance(spec, FixSpec) and spec.disruptive and spec.confirm_key
+    # harmless hardening does not nag
+    from .conftest import write_sshd_config
+
+    write_sshd_config(fake_root, SSHD_MAIN + "X11Forwarding yes\n")
+    assert REGISTRY["SSH-006"](ctx, failing(ctx, "SSH-006")).confirm_key is None
+
+
+def test_cli_wizard_flow_reverts_when_the_user_does_not_confirm(
+    make_ctx, fake_root, capsys, monkeypatch, tmp_path
+):
+    from reviveguard import cli
+
+    ctx = root_host(make_ctx, fake_root, KEY_LOG)
+    monkeypatch.setattr("reviveguard.config.DEFAULT_CONFIG_PATH", tmp_path / "none.toml")
+    monkeypatch.setattr("reviveguard.fixflow.read_confirmation", lambda timeout: False)
+    answers = iter(["y", "yes"])
+    monkeypatch.setattr("builtins.input", lambda p="": next(answers))
+    args = ["--lang", "en", "--state-dir", str(tmp_path / "s"), "fix", "--check", "SSH-002"]
+    rc = cli.main(args, ctx=ctx)
+    out = capsys.readouterr()
+    assert rc == 1 and "reverted" in out.err
+    assert "Open a NEW terminal NOW" in out.out and "do NOT type anything" in out.out
+    assert not list((fake_root / "etc/ssh/sshd_config.d").glob("*passwordauthentication*"))

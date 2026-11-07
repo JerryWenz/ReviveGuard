@@ -116,3 +116,14 @@ __all__ = [
     "JOURNAL",
     "ACCEPTED_KEY",
 ]
+
+
+from reviveguard import fixflow as _fixflow  # noqa: E402
+
+REAL_READ_CONFIRMATION = _fixflow.read_confirmation  # the unpatched implementation
+
+
+@pytest.fixture(autouse=True)
+def _auto_confirm(monkeypatch):
+    """Tests answer the live 'type ok in 3 minutes' prompt with yes unless they patch it."""
+    monkeypatch.setattr("reviveguard.fixflow.read_confirmation", lambda timeout: True)

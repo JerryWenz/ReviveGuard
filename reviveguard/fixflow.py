@@ -31,7 +31,7 @@ class Item:
     plan: FixSpec | Manual
 
 
-CONFIRM_SECONDS = 120
+CONFIRM_SECONDS = 180
 
 
 def read_confirmation(timeout: int) -> bool:

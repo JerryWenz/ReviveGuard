@@ -50,7 +50,7 @@ def test_password_fix_full_flow(make_ctx, fake_root, store):
     ctx = make_ctx(runner=runner, env=env_for("alice"))
     spec = plan(ctx, "SSH-002")
     assert isinstance(spec, FixSpec) and spec.disruptive
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "applied"
     dropin = fake_root / "etc/ssh/sshd_config.d/00-reviveguard-passwordauthentication.conf"
     assert "PasswordAuthentication no" in dropin.read_text()
@@ -143,7 +143,7 @@ def test_root_login_disabled_when_current_admin_has_access(make_ctx, fake_root, 
     ctx = make_ctx(runner=ssh_runner(), env=env_for("alice"))
     spec = plan(ctx, "SSH-001")
     assert isinstance(spec, FixSpec) and spec.change_args["directive"] == "PermitRootLogin no"
-    assert run_fix(store, ctx, spec).status == "applied"
+    assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
 
 
 def test_root_login_refused_when_current_user_not_verified(make_ctx, fake_root):
@@ -183,7 +183,7 @@ def test_empty_passwords_and_pubkey_fixes_apply(make_ctx, fake_root, store):
     for check_id in ("SSH-003", "SSH-004"):
         spec = plan(ctx, check_id)
         assert isinstance(spec, FixSpec) and not spec.disruptive
-        assert run_fix(store, ctx, spec).status == "applied"
+        assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
 
 
 def test_precheck_directive_before_include_is_manual(make_ctx, fake_root):
@@ -249,7 +249,7 @@ def dropin(fake_root):
 def test_validation_failure_reverts_and_never_reloads(make_ctx, fake_root, store):
     runner = FlakyRunner(ssh_runner())
     ctx, spec = planned(make_ctx, fake_root, runner)
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "validation_failed" and outcome.reverted and outcome.revert_ok
     assert not dropin(fake_root).exists()
     assert ["systemctl", "reload", "ssh"] not in runner.calls
@@ -259,7 +259,7 @@ def test_validation_failure_reverts_and_never_reloads(make_ctx, fake_root, store
 def test_reload_failure_reverts_and_reloads_again(make_ctx, fake_root, store):
     runner = FlakyRunner(ssh_runner(), fail_after=99, reload_ok=False)
     ctx, spec = planned(make_ctx, fake_root, runner)
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "activation_failed" and outcome.revert_ok
     assert not dropin(fake_root).exists()
     assert runner.calls.count(["systemctl", "reload", "ssh"]) == 2  # fix, then restore
@@ -269,14 +269,14 @@ def test_missing_systemctl_means_no_change_is_kept(make_ctx, fake_root, store):
     runner = ssh_runner()
     del runner.responses[("systemctl", "--version")]
     ctx, spec = planned(make_ctx, fake_root, runner)
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "activation_failed" and not dropin(fake_root).exists()
 
 
 def test_ineffective_change_fails_verification_and_reverts(make_ctx, fake_root, store):
     ctx, spec = planned(make_ctx, fake_root, ssh_runner())
     spec.apply = lambda: dropin(fake_root).write_text("# does nothing\n")
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "verify_failed" and outcome.revert_ok
     assert not dropin(fake_root).exists()
 
@@ -289,7 +289,7 @@ def test_apply_exception_reverts(make_ctx, fake_root, store):
         raise OSError(28, "No space left on device")
 
     spec.apply = boom
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "apply_failed" and not dropin(fake_root).exists()
 
 
@@ -302,7 +302,7 @@ def test_keyboard_interrupt_restores_then_propagates(make_ctx, fake_root, store)
 
     spec.apply = interrupted
     with pytest.raises(KeyboardInterrupt):
-        run_fix(store, ctx, spec)
+        run_fix(store, ctx, spec, confirm=lambda s: True)
     assert not dropin(fake_root).exists()
     ops, _ = store.list_operations()
     assert ops[0].status == "rolled_back"
@@ -324,7 +324,7 @@ def test_failed_revert_is_reported(make_ctx, fake_root, store, monkeypatch):
         raise remediation.RollbackError("disk gone")
 
     monkeypatch.setattr(remediation, "execute_rollback", deny)
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "validation_failed" and outcome.revert_ok is False
 
 
@@ -332,7 +332,7 @@ def test_user_can_roll_back_an_applied_fix(make_ctx, fake_root, store):
     from reviveguard import rollback
 
     ctx, spec = planned(make_ctx, fake_root, ssh_runner())
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert dropin(fake_root).exists()
     assert rollback.execute_rollback(store, rollback.plan_rollback(store, outcome.op_id)) == []
     assert not dropin(fake_root).exists()
@@ -363,7 +363,7 @@ def test_config_perms_fix(make_ctx, fake_root, store, monkeypatch):
 
     ctx = make_ctx(runner=ssh_runner(), stat=stat)
     spec = plan(ctx, "SSH-005")
-    outcome = run_fix(store, ctx, spec)
+    outcome = run_fix(store, ctx, spec, confirm=lambda s: True)
     assert outcome.status == "applied" and (cfg.stat().st_mode & 0o777) == 0o600
     from reviveguard import rollback
 

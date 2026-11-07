@@ -382,5 +382,7 @@
   "fix.access.add_key": "add the login key {fingerprint} to the account '{name}' (existing keys are kept)",
   "fix.next.admin_user_nokey": "the account has no login key yet, so nobody can log in as {name}. On your computer run 'cat ~/.ssh/id_ed25519.pub', then here: 'reviveguard add-key --name {name}' and paste the line. Then test 'ssh {name}@<server>' in a NEW terminal.",
   "fix.next.key_added": "open a NEW terminal and check that 'ssh {name}@<server>' works and 'sudo -v' succeeds. Then reconnect as {name} and run 'sudo reviveguard wizard' to switch off root login and passwords.",
-  "wizard.admin_failed_skip": "The administrator account was not created, so I skip the steps that narrow access (root login, passwords): they could lock you out. Run 'reviveguard admin-user' and then 'reviveguard wizard' again."
+  "wizard.admin_failed_skip": "The administrator account was not created, so I skip the steps that narrow access (root login, passwords): they could lock you out. Run 'reviveguard admin-user' and then 'reviveguard wizard' again.",
+  "fix.confirm.ssh": "Open a NEW terminal NOW and log in to this server the way you normally do (with your key). Only if it works, type 'ok' here. If you cannot get in, do NOT type anything: the change will be reverted automatically.",
+  "fix.confirm.ssh_port": "Open a NEW terminal NOW and log in through port {port} ('ssh -p {port} <user>@<server>'). Only if it works, type 'ok' here. Otherwise type nothing: the change will be reverted automatically."
 }

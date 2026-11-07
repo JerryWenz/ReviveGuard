@@ -54,7 +54,7 @@ def test_simple_hardening_fixes(make_ctx, fake_root, store, check_id, config, na
     ctx = make_ctx(runner=ssh_runner(), env={"SUDO_USER": "alice"})
     spec = plan(ctx, check_id)
     assert isinstance(spec, FixSpec) and not spec.disruptive and check_id in AUTOMATIC
-    assert run_fix(store, ctx, spec).status == "applied"
+    assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
     assert expect in dropin(fake_root, name).read_text()
     assert ssh_checks.run(ctx) and failing_ids(ctx).isdisjoint({check_id})
 
@@ -91,7 +91,7 @@ def test_weak_algorithms_fix_removes_only_the_weak_ones(make_ctx, fake_root, sto
     ctx = make_ctx(runner=SshdTRunner(fake_root, ssh_runner()), env={"SUDO_USER": "alice"})
     spec = plan(ctx, "SSH-009")
     assert isinstance(spec, FixSpec) and spec.disruptive  # old clients may break
-    assert run_fix(store, ctx, spec).status == "applied"
+    assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
     text = dropin(fake_root, "00-reviveguard-ciphers.conf").read_text()
     assert "Ciphers -aes128-cbc" in text and "MACs -hmac-md5" in text
     assert "aes256-gcm" not in text  # strong ones are never touched
@@ -137,7 +137,7 @@ def test_port_add_keeps_22_and_adds_a_stable_high_port(make_ctx, fake_root, stor
     assert isinstance(spec, FixSpec) and spec.disruptive and spec.next_key == "fix.next.port_added"
     again = plan(ctx, "SSH-010")
     assert spec.change_args == again.change_args  # reproducible proposal
-    assert run_fix(store, ctx, spec).status == "applied"
+    assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
     ports = host.ports()
     assert ports[0] == 22 and 20000 <= ports[1] < 60000 and len(ports) == 2
     text = dropin(fake_root, "00-reviveguard-port.conf").read_text()
@@ -155,7 +155,7 @@ def test_port_add_also_updates_fail2ban_when_installed(make_ctx, fake_root, stor
     )
     spec = plan(ctx, "SSH-010")
     assert len(spec.files) == 2
-    assert run_fix(store, ctx, spec).status == "applied"
+    assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
     jail = (fake_root / "etc/fail2ban/jail.d/reviveguard-sshd-port.local").read_text()
     assert "[sshd]" in jail and "port = 22," in jail
     assert ["fail2ban-client", "reload"] in host.calls
@@ -208,7 +208,7 @@ def test_port_add_reverts_when_sshd_never_listens(make_ctx, fake_root, store, mo
     host, ctx = port_ctx(make_ctx, fake_root)
     monkeypatch.setattr("reviveguard.fixes.ssh.time.sleep", lambda s: None)
     host.ports = lambda: [22]  # sshd ignores the new port
-    outcome = run_fix(store, ctx, plan(ctx, "SSH-010"))
+    outcome = run_fix(store, ctx, plan(ctx, "SSH-010"), confirm=lambda s: True)
     assert outcome.status == "verify_failed" and outcome.revert_ok
     assert not dropin(fake_root, "00-reviveguard-port.conf").exists()
 
@@ -240,7 +240,7 @@ def test_port_finish_drops_22_after_login_via_new_port(make_ctx, fake_root, stor
     host, ctx = migrated(make_ctx, fake_root, via_new)
     spec = REGISTRY["SSH-011"](ctx, failing(ctx, "SSH-011"))
     assert isinstance(spec, FixSpec) and spec.disruptive
-    assert run_fix(store, ctx, spec).status == "applied"
+    assert run_fix(store, ctx, spec, confirm=lambda s: True).status == "applied"
     assert host.ports() == [48222]
     assert "Port 22" not in dropin(fake_root, "00-reviveguard-port.conf").read_text()
 
